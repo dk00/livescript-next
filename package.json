@@ -1,0 +1,27 @@
+{
+  "version": "0.0.1",
+  "main": "lib/index.js",
+  "dependencies": {
+    "babel-core": "",
+    "babel-preset-es2015": "",
+    "livescript": ""
+  },
+  "scripts": {
+    "prepublish": "lsc -bc -o lib src/*",
+    "test": "node examples/index"
+  },
+  "keywords": [
+    "LiveScript",
+    "ECMAScript",
+    "esnext",
+    "es2017",
+    "es2016",
+    "es6",
+    "ast",
+    "functional",
+    "babel",
+    "javascript"
+  ],
+  "author": "dk00 <dk00@users.noreply.github.com>",
+  "license": "Unlicense"
+}
