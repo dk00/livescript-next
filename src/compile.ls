@@ -1,13 +1,8 @@
-require! \livescript : {ast} \./transform : transform,\
-  \babel-core : {transformFromAst}
+``
+import {ast} from 'livescript'
+import {transformFromAst} from 'babel-core'
+import convert from './convert'``
 
-function compile file => transformFromAst transform ast file
+function compile file => transformFromAst convert ast file
 
-module.exports = compile
-
-function main
-  readFileSync = require \fs .readFileSync
-  file = readFileSync \/dev/stdin .toString!
-  compile file
-
-main! if require.main === module
+``export default compile``
