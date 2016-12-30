@@ -1,18 +1,18 @@
-require! fs: {readFileSync} livescript : {compile} \babel-core : babel
+require! fs: {readFileSync} livescript, \babel-core : babel
 delete require.extensions\ls
 require \babel-register <| extensions: <[.ls .jsx .js]>
 
 transformFileSync = void
-function loader filename, options
+function loader compile => (filename, options) ->
   return transformFileSync filename, options unless /\.ls/test filename
   file = readFileSync filename, \utf8
   code = compile file, {filename, +bare}
   babel.transform code, options
 
-function patch
-  return if transformFileSync
-  transformFileSync := babel.transformFileSync
-  babel.transformFileSync = loader
+function patch compile=livescript.compile
+  transformFileSync ?:= babel.transformFileSync
+  babel.transformFileSync = loader compile
   -> babel.transformFileSync = transformFileSync
 
 patch!
+module.exports = patch
