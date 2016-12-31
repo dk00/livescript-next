@@ -4,7 +4,7 @@ function L
   start: line: it.first_line, column: it.first_column
   end: line: it.last_line, column: it.last_column
 
-[none = [] empty = {} REF = 1 ASSIGN = 2 DECL = 4 PARAM = 8]
+[none = [] empty = {} TOP = {} REF = 1 ASSIGN = 2 DECL = 4 PARAM = 8]
 function pass => it
 node-type = (.constructor.display-name)
 function node-name
@@ -42,12 +42,53 @@ function define {types=none, pre=pass, post=pass, args, build}
   t[build] ...params ++ nodes
     ..scope = scope
 
-#Node types
+function pair
+  if node-name it
+    [that, that]
+  else
+    [node-name it.key; it.val.items?map pair or node-name it.val]
+
+# Module Import
+
+function select-import node, scope
+  node.constructor = display-name: import-type node, scope
+  t node, scope
+
+top-import = (.value == \this)
+function import-type {left}, scope
+  if (top-import left or left.verb == \out) && scope.__proto__ == TOP
+    \Module
+  else \ObjectImport
+
+function specify type, [name, alias]
+  t[type] (t.id alias), t.id name
+
+function module-io {left, right} _
+  items = (right.items || [right])map pair
+  [...lines, last] = if top-import left
+    items.map ([source, names]) ->
+      specifiers = names.map? specify.bind void \importSpecifier
+      or [t.importDefaultSpecifier t.id names]
+      t.importDeclaration specifiers, t.stringLiteral source
+  else
+    local = items.filter -> !it.1.map
+    .map specify.bind void \exportSpecifier
+    external = items.filter (.1.map) .map ([source, names]) ->
+      specifiers = names.map specify.bind void \exportSpecifier
+      t.exportNamedDeclaration void specifiers, t.stringLiteral source
+    external ++ if local.length > 0
+      [t.exportNamedDeclaration void local]
+    else []
+
+  last <<< {lines}
+
 function map-values object, value
   Object.keys object .reduce (result, key) ->
     result[key]? = value object[key]
     result
   , {}
+
+# Assign
 
 function set-assign scope, type
   map-values scope, -> if it.&.PARAM then (it.&.~PARAM).|.type else it
@@ -55,6 +96,8 @@ function set-assign scope, type
 function make-assign [args, scope],, node
   type = if node.op == \= then DECL else ASSIGN
   [args, set-assign scope, type]
+
+# Block
 
 function declare names
   t.variableDeclaration \let names.map -> t.variableDeclarator t.id it
@@ -77,6 +120,8 @@ function make-block [[body] scope] upper
   [[body] scope]
 
 function omit-declared => it if it < DECL
+
+# Function
 
 function make-function [[params, block] scope]
   if params.length == 0 && block.scope.it
@@ -109,12 +154,16 @@ t <<<
 
   Var: -> (t.id it.value) <<< scope: (it.value): REF
 
+  Import: select-import
+  Module: module-io
+
   Assign: define do
     build: \assignmentExpression types: [lval, expr]
     post: make-assign, args: (node) -> [node.op]
 
   Block: define do
-    build: \blockStatement types: [statement] pre: -> {}
+    build: \blockStatement types: [statement] pre: ->
+      if it == TOP then it else {}
     post: make-block
 
   Fun: define do
@@ -123,7 +172,7 @@ t <<<
     post: make-function, args: (node) -> [t.id node.name || '']
 
 function convert root
-  program = t root, {}
+  program = t root, TOP
     ..type = \Program
   t.file program, [] []
     ..loc = program.loc
