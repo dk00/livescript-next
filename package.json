@@ -1,14 +1,38 @@
 {
+  "name": "livescript-next",
   "version": "0.0.1",
   "main": "lib/index.js",
+  "module": "es/index.js",
+  "esnext:main": "es/index.js",
+  "files": [
+    "dist",
+    "es",
+    "lib"
+  ],
   "dependencies": {
+    "babel-types": ""
+  },
+  "peerDependencies": {
     "babel-core": "",
     "babel-preset-es2015": "",
+    "babel-register": "",
     "livescript": ""
   },
+  "devDependencies": {
+    "babel-core": "",
+    "babel-preset-es2015": "",
+    "babel-register": "",
+    "gulp": "",
+    "istanbul": "",
+    "livescript": "",
+    "remap-istanbul": "",
+    "rollup": "",
+    "rollup-plugin-node-resolve": "",
+    "tape": ""
+  },
   "scripts": {
-    "prepublish": "lsc -bc -o lib src/*",
-    "test": "node examples/index"
+    "prepublish": "gulp dist",
+    "test": "gulp"
   },
   "keywords": [
     "LiveScript",
