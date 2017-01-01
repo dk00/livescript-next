@@ -97,6 +97,12 @@ function make-assign [args, scope],, node
   type = if node.op == \= then DECL else ASSIGN
   [args, set-assign scope, type]
 
+function rewrap {head, tails}
+  tails.reduce _, head <| (tree, node) ->
+    key = node.children.0
+    node{(key), constructor} <<<
+      base: tree, children: [\base] ++ node.children
+
 # Block
 
 function declare names
@@ -132,7 +138,7 @@ function make-function [[params, block] scope]
 
 #Child types
 function derive adapt, node
-  that <<< node{scope, lines} if adapt node
+  (adapt node) <<< node{scope, lines}
 
 statement = derive.bind void ->
   | t.toStatement it, true => that
@@ -140,22 +146,28 @@ statement = derive.bind void ->
   | _ => it
 
 expr = derive.bind void ->
-  | it?expression => that
   | t.isExpression it => it
+  | _ => it.expression
 
 function lval node
-  node.scope[that] .|.= PARAM if node.name
+  node.scope[node.name] .|.= PARAM
   node
 
 t <<<
   id: -> t.identifier it
-  unk: -> t.id (node-type it) + \$
-  return: -> if expr it then t.returnStatement that else it
+  unk: -> t.stringLiteral (node-type it) + \$
+  return: -> t.returnStatement expr it
 
+  Literal: -> t.valueToNode eval it.value
+  Key: -> t.id it.name
   Var: -> (t.id it.value) <<< scope: (it.value): REF
 
   Import: select-import
   Module: module-io
+
+  Index: define build: \memberExpression
+  Call: define build: \callExpression
+  Chain: (node, scope) -> t _, scope <| rewrap node
 
   Assign: define do
     build: \assignmentExpression types: [lval, expr]
