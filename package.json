@@ -1,9 +1,10 @@
 {
   "name": "livescript-next",
-  "version": "0.0.1",
+  "description": "Enable latest ES features for LiveScript",
+  "version": "0.0.1-alpha",
   "main": "lib/index.js",
   "module": "es/index.js",
-  "esnext:main": "es/index.js",
+  "jsnext:main": "es/index.js",
   "files": [
     "dist",
     "es",
