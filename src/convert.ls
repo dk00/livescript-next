@@ -34,12 +34,11 @@ function reduce children, upper, types
     arg.map? collect or collect arg
   [args, scope]
 
-function define {types=none, pre=pass, post=pass, args, build}
+function define {types=none, pre=pass, post=pass, params=pass, build}
 => (node, upper) ->
   scope = pre upper, node
   [nodes, scope] = post (reduce node.children, scope, types), upper, node
-  params = args? node or none
-  t[build] ...params ++ nodes
+  t[build] ...params nodes, node
     ..scope = scope
 
 function pair
@@ -138,7 +137,7 @@ function make-function [[params, block] scope]
 
 #Child types
 function derive adapt, node
-  (adapt node) <<< node{scope, lines}
+  (adapt node) <<< node{scope, lines, loc}
 
 statement = derive.bind void ->
   | t.toStatement it, true => that
@@ -153,25 +152,40 @@ function lval node
   node.scope[node.name] .|.= PARAM
   node
 
+property = derive.bind void ->
+  | it.type == \ObjectProperty => it
+  | _ => t.objectProperty ...property-params [it, it]
+
+function property-params [key, value]
+  computed = key.type != \Identifier && key.type != \Literal
+  shorthand = key == value
+  [key, value, computed, shorthand]
+
 t <<<
   id: -> t.identifier it
-  unk: -> t.stringLiteral (node-type it) + \$
+  unk: ->
+    it.tab = ''
+    t.stringLiteral <| it.compile-node indent: '' .toString!
   return: -> t.returnStatement expr it
 
   Literal: -> t.valueToNode eval it.value
   Key: -> t.id it.name
   Var: -> (t.id it.value) <<< scope: (it.value): REF
 
+  Obj: define build: \objectExpression types: [property]
+  Prop: define build: \objectProperty params: property-params
+
   Import: select-import
   Module: module-io
 
+  Parens: (node, scope) -> t node.it, scope
   Index: define build: \memberExpression
   Call: define build: \callExpression
   Chain: (node, scope) -> t _, scope <| rewrap node
 
   Assign: define do
     build: \assignmentExpression types: [lval, expr]
-    post: make-assign, args: (node) -> [node.op]
+    post: make-assign, params: (args, node) -> [node.op] ++ args
 
   Block: define do
     build: \blockStatement types: [statement] pre: ->
@@ -181,7 +195,8 @@ t <<<
   Fun: define do
     build: \functionExpression types: [lval, statement]
     pre: (, node) -> if node.params.length == 0 then it: DECL else {}
-    post: make-function, args: (node) -> [t.id node.name || '']
+    post: make-function,
+    params: (args, node) -> [t.id node.name || ''] ++ args
 
 function convert root
   program = t root, TOP
