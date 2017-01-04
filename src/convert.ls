@@ -41,43 +41,45 @@ function define {types=none, pre=pass, post=pass, params=pass, build}
   t[build] ...params nodes, node
     ..scope = scope
 
-function pair
-  if node-name it
-    [that, that]
-  else
-    [node-name it.key; it.val.items?map pair or node-name it.val]
+function expand-pair
+  if it.type == \Identifier then [[it, it]] else it
 
-# Module Import
+function list
+  result = it.properties?map ->; * it.key, list it.value
+  result || it
+
+# Module
 
 function select-import node, scope
   node.constructor = display-name: import-type node, scope
   t node, scope
 
-top-import = (.value == \this)
+importing-module = (.value == \this)
 function import-type {left}, scope
-  if (top-import left or left.verb == \out) && scope.__proto__ == TOP
+  if (importing-module left or left.verb == \out) && scope.__proto__ == TOP
     \Module
   else \ObjectImport
 
-function specify type, [name, alias]
-  t[type] (t.id alias), t.id name
+function pack-export => [;* void it]
+function pack-import => it.map ([source, name]) -> ;* source, [[name]]
+function specify-import alias, name
+  if alias then t.importSpecifier alias, name
+  else t.importDefaultSpecifier name
 
-function module-io {left, right} _
-  items = (right.items || [right])map pair
-  [...lines, last] = if top-import left
-    items.map ([source, names]) ->
-      specifiers = names.map? specify.bind void \importSpecifier
-      or [t.importDefaultSpecifier t.id names]
-      t.importDeclaration specifiers, t.stringLiteral source
+function module-declare extended, base, declare, specify, pack
+  extended.concat if base.length > 0 then pack base else []
+  .map ([from, names]) ->
+    source = string-literal that if from
+    declare _, source <| names.map ([name, alias]) -> specify alias, name
+
+function module-io {left, right} scope
+  items = list expand-pair t right, scope
+  base = items.filter -> !it.1.map
+  extended = items.filter (.1.map)
+  [...lines, last] = module-declare extended, base, ...if importing-module left
+    * t.importDeclaration, specify-import, pack-import
   else
-    local = items.filter -> !it.1.map
-    .map specify.bind void \exportSpecifier
-    external = items.filter (.1.map) .map ([source, names]) ->
-      specifiers = names.map specify.bind void \exportSpecifier
-      t.exportNamedDeclaration void specifiers, t.stringLiteral source
-    external ++ if local.length > 0
-      [t.exportNamedDeclaration void local]
-    else []
+    * t.exportNamedDeclaration.bind void void; t.exportSpecifier, pack-export
 
   last <<< {lines}
 
@@ -136,23 +138,27 @@ function make-function [[params, block] scope]
   [[params, block] map-values block.scope, omit-declared]
 
 #Child types
-function derive adapt, node
+function derive adapt => (node) ->
   (adapt node) <<< node{scope, lines, loc}
 
-statement = derive.bind void ->
+statement = derive ->
   | t.toStatement it, true => that
   | t.isExpression it => t.expressionStatement it
   | _ => it
 
-expr = derive.bind void ->
+expr = derive ->
   | t.isExpression it => it
   | _ => it.expression
+
+string-literal = derive ->
+  | it.type == \StringLiteral => it
+  | it.name => t.stringLiteral that
 
 function lval node
   node.scope[node.name] .|.= PARAM
   node
 
-property = derive.bind void ->
+property = derive ->
   | it.type == \ObjectProperty => it
   | _ => t.objectProperty ...property-params [it, it]
 
