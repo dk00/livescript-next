@@ -4,5 +4,6 @@ node_js:
   - lts/*
 cache: yarn
 after_success:
-  - npm i codecov
+  - yarn add -O coveralls codecov
   - ./node_modules/.bin/codecov
+  - ./node_modules/coveralls/bin/coveralls.js < ./coverage/lcov.info

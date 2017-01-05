@@ -167,6 +167,9 @@ function property-params [key, value]
   shorthand = key == value
   [key, value, computed, shorthand]
 
+function member-params [object, property]
+  [object, property, property.type != \Identifier]
+
 t <<<
   id: -> t.identifier it
   unk: ->
@@ -178,6 +181,7 @@ t <<<
   Key: -> t.id it.name
   Var: -> (t.id it.value) <<< scope: (it.value): REF
 
+  Arr: define build: \arrayExpression
   Obj: define build: \objectExpression types: [property]
   Prop: define build: \objectProperty params: property-params
 
@@ -185,7 +189,7 @@ t <<<
   Module: module-io
 
   Parens: (node, scope) -> t node.it, scope
-  Index: define build: \memberExpression
+  Index: define build: \memberExpression params: member-params
   Call: define build: \callExpression
   Chain: (node, scope) -> t _, scope <| rewrap node
 
