@@ -5,6 +5,9 @@ function main t
   a = 1
   a += a
   t.equal a, 2, 'shorthand assignment: add to'
+
+  [c] = [a]
+  t.equal c, a, 'destructuring assignment: array'
   t.end!
 
 export default: main

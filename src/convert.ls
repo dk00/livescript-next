@@ -13,10 +13,14 @@ function node-name
 
 function t node, scope
   convert-node = t[node-type node] || t.unk
-  node.children .= map -> node[it]
+  node.children .= map -> node[it] || it
   convert-node node, scope
     ..loc = L node
 t <<< types
+t <<< # work around babel/babel#4741
+  arrayPattern: (elements) -> type: \ArrayPattern elements
+  objectProperty: (key, value, computed, shorthand) ->
+    {type: \ObjectProperty key, value, computed, shorthand}
 
 function merge scope, nested
   Object.keys nested .forEach (key) -> scope[key] .|.= nested[key]
@@ -26,18 +30,21 @@ function convert-arg scope, convert-type, node
   convert-type t node, scope
     merge scope, that if ..scope
 
+function list-apply whatever, fn => whatever.map? fn or fn whatever
+
 function reduce children, upper, types
   scope = Object.create upper
 
   args = children.map (arg, index) ->
     collect = convert-arg.bind void scope, types[index] || pass
-    arg.map? collect or collect arg
+    list-apply arg, collect
   [args, scope]
 
-function define {types=none, pre=pass, post=pass, params=pass, build}
+function define {types=none, transform=pass, input=pass, output=pass, params=pass, build}
 => (node, upper) ->
-  scope = pre upper, node
-  [nodes, scope] = post (reduce node.children, scope, types), upper, node
+  scope = input upper, node
+  node.children.0 = list-apply node.children.0, transform
+  [nodes, scope] = output (reduce node.children, scope, types), upper, node
   t[build] ...params nodes, node
     ..scope = scope
 
@@ -48,10 +55,12 @@ function list
   result = it.properties?map ->; * it.key, list it.value
   result || it
 
+function change-name node, name => node <<< constructor: display-name: name
+
 # Module
 
 function select-import node, scope
-  node.constructor = display-name: import-type node, scope
+  change-name node, import-type node, scope
   t node, scope
 
 importing-module = (.value == \this)
@@ -91,12 +100,17 @@ function map-values object, value
 
 # Assign
 
-function set-assign scope, type
-  map-values scope, -> if it.&.PARAM then (it.&.~PARAM).|.type else it
+function select-assign node, scope
+  change-name node, if node.op == \= then \Declare else \Assign=
+  t node, scope
 
-function make-assign [args, scope],, node
-  type = if node.op == \= then DECL else ASSIGN
-  [args, set-assign scope, type]
+function lval node
+  change-name node, lval[node-type node]
+  node
+lval <<< Var: \Local Key: \Local \
+Arr: \ArrayPattern Obj: \ObjectPattern Prop: \PropertyPattern
+
+function assign-params args, node => [node.op] ++ args
 
 function rewrap {head, tails}
   tails.reduce _, head <| (tree, node) ->
@@ -150,13 +164,10 @@ expr = derive ->
   | t.isExpression it => it
   | _ => it.expression
 
+literals = arguments: t.identifier \arguments
 string-literal = derive ->
   | it.type == \StringLiteral => it
   | it.name => t.stringLiteral that
-
-function lval node
-  node.scope[node.name] .|.= PARAM
-  node
 
 property = derive ->
   | it.type == \ObjectProperty => it
@@ -174,14 +185,16 @@ t <<<
   id: -> t.identifier it
   unk: ->
     it.tab = ''
-    t.stringLiteral <| it.compile-node indent: '' .toString!
+    t.string-literal <| it.compile-node indent: '' .toString!
   return: -> t.returnStatement expr it
 
-  Literal: -> t.valueToNode eval it.value
+  Literal: -> literals[it.value] or t.valueToNode eval it.value
   Key: -> t.id it.name
   Var: -> (t.id it.value) <<< scope: (it.value): REF
+  Local: -> (t.id it.value) <<< scope: (it.value): DECL
 
   Arr: define build: \arrayExpression
+  ArrayPattern: define build: \arrayPattern transform: lval
   Obj: define build: \objectExpression types: [property]
   Prop: define build: \objectProperty params: property-params
 
@@ -193,19 +206,20 @@ t <<<
   Call: define build: \callExpression
   Chain: (node, scope) -> t _, scope <| rewrap node
 
-  Assign: define do
-    build: \assignmentExpression types: [lval, expr]
-    post: make-assign, params: (args, node) -> [node.op] ++ args
+  Assign: select-assign
+  Declare: define build: \assignmentExpression params: assign-params
+                , transform: lval
+  \Assign= : define build: \assignmentExpression params: assign-params
 
   Block: define do
-    build: \blockStatement types: [statement] pre: ->
+    build: \blockStatement types: [statement] input: ->
       if it == TOP then it else {}
-    post: make-block
+    output: make-block
 
   Fun: define do
-    build: \functionExpression types: [lval, statement]
-    pre: (, node) -> if node.params.length == 0 then it: DECL else {}
-    post: make-function,
+    build: \functionExpression transform: lval
+    input: (, node) -> if node.params.length == 0 then it: DECL else {}
+    output: make-function
     params: (args, node) -> [t.id node.name || ''] ++ args
 
 function convert root
