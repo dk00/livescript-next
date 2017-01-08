@@ -17,7 +17,10 @@ See [wiki](/dk00/livescript-next/wiki) for what are added and what are going to 
   - [x] Named import and export
   - [ ] Export expression
   - [ ] Import only side-effect
-- [ ] Destructing assignment/parameter
+- Destructing assignment/parameter
+  - [x] Basic support
+  - [ ] With default value
+  - [ ] Spread operator
 - [ ] External helper
 - [ ] Block scope(optional)
 - [ ] Async function

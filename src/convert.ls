@@ -13,7 +13,7 @@ function node-name
 
 function t node, scope
   convert-node = t[node-type node] || t.unk
-  node.children .= map -> node[it] || it
+  node.children .= map -> if \string == typeof it then node[it] else it
   convert-node node, scope
     ..loc = L node
 t <<< types
@@ -23,30 +23,35 @@ t <<< # work around babel/babel#4741
     {type: \ObjectProperty key, value, computed, shorthand}
 
 function merge scope, nested
-  Object.keys nested .forEach (key) -> scope[key] .|.= nested[key]
+  if nested
+    Object.keys nested .forEach (key) -> scope[key] .|.= nested[key]
   scope
-
-function convert-arg scope, convert-type, node
-  convert-type t node, scope
-    merge scope, that if ..scope
 
 function list-apply whatever, fn => whatever.map? fn or fn whatever
 
-function reduce children, upper, types
-  scope = Object.create upper
+function convert-arg arg, scope, convert-type, index
+  []concat arg .reduce ([nodes, lines, scope] arg, sub-index) ->
+    return [nodes ++ arg, lines, scope] unless arg
+    node = convert-type (t arg, scope), index + 4*(sub-index || 0)
+    [nodes ++ node; lines.concat node.lines; merge scope, node.scope]
+  , [[] [] scope]
+    ..0 = ..0.0 unless arg?reduce
 
-  args = children.map (arg, index) ->
-    collect = convert-arg.bind void scope, types[index] || pass
-    list-apply arg, collect
-  [args, scope]
+function reduce children, upper, types
+  children.reduce ([args, lines, scope] arg, index) ->
+    [sub-args, sub-lines, next-scope] =
+      convert-arg arg, scope, types[index] || expr, index
+    [args ++ [sub-args] lines.concat sub-lines; next-scope]
+  , [[] [] Object.create upper]
 
 function define {types=none, transform=pass, input=pass, output=pass, params=pass, build}
 => (node, upper) ->
   scope = input upper, node
   node.children = transform node.children
-  [nodes, scope] = output (reduce node.children, scope, types), upper, node
-  t[build] ...params nodes, node
-    ..scope = scope
+  [nodes, lines, scope] = reduce node.children, scope, types
+  [nodes, scope] = output [nodes, scope] upper, node
+  lines = [] if build == \blockStatement
+  (t[build] ...params nodes, node) <<< {scope, lines}
 
 function expand-pair
   if it.type == \Identifier then [[it, it]] else it
@@ -135,7 +140,7 @@ function close-scope upper, scope
 function make-block [[body] scope] upper
   [declarations, referenced] = close-scope upper, scope
   body = body.reduce (body, node) ->
-    body ++= (node.lines || []) ++ node
+    body ++= node.lines ++ node
   , []
   body.unshift that if declarations
   scope = {[k, scope[k]] for k in referenced}
@@ -145,25 +150,48 @@ function omit-declared => it if it < DECL
 
 # Function
 
-function make-function [[params, block] scope]
+result =
+  IfStatement: (node, fn) ->
+    <[consequent alternate]>reduce (node, key) ->
+      node[key] &&= convert-result node[key], fn
+      node
+    , Object.assign {} node
+  BlockStatement: ({body}: node, fn) ->
+    last = body.length - 1
+    Object.assign {} node, body:
+      Object.assign [] body, (last): convert-result body[last], fn
+
+function convert-result node, fn
+  return that node, fn if result[node.type]
+  fn node
+
+function make-function [[params, block]]
   if params.length == 0 && block.scope.it
     params.push t.id \it
     block.scope.it = DECL
-  block.body[*-1] = t.return block.body[*-1]
-  [[params, block] map-values block.scope, omit-declared]
+  scope = map-values block.scope, omit-declared
+  [[params, convert-result block, t.return] scope]
 
 #Child types
-function derive adapt => (node) ->
-  (adapt node) <<< node{scope, lines, loc}
+function derive adapt => (node, index) ->
+  (adapt node, index) <<< node{loc}
+    ..lines = [] ++ (node.lines || []) ++ (..pre || [])
+    ..scope = merge node.scope, ..scope
 
 statement = derive ->
   | t.toStatement it, true => that
   | t.isExpression it => t.expressionStatement it
   | _ => it
 
-expr = derive ->
-  | t.isExpression it => it
-  | _ => it.expression
+function wrap-expression node, index
+  cache = t.id name = "ref#{index}$"
+  node = convert-result node, -> t.assignmentExpression \= cache, expr it
+  cache <<< pre: [node] scope: (name): DECL
+
+expr = derive (node, index) ->
+  | t.isExpression node or t.isPattern node => node
+  | node.expression => that
+  | _ => wrap-expression node, index
 
 literals = arguments: t.identifier \arguments
 string-literal = derive ->
@@ -224,10 +252,12 @@ t <<<
     output: make-block
 
   Fun: define do
-    build: \functionExpression transform: lval 0
+    build: \functionExpression types: [void statement] transform: lval 0
     input: (, node) -> if node.params.length == 0 then it: DECL else {}
     output: make-function
     params: (args, node) -> [t.id node.name || ''] ++ args
+
+  If: define build: \ifStatement types: [void statement, statement]
 
 function convert root
   program = t root, TOP
