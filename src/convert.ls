@@ -43,7 +43,7 @@ function reduce children, upper, types
 function define {types=none, transform=pass, input=pass, output=pass, params=pass, build}
 => (node, upper) ->
   scope = input upper, node
-  node.children.0 = list-apply node.children.0, transform
+  node.children = transform node.children
   [nodes, scope] = output (reduce node.children, scope, types), upper, node
   t[build] ...params nodes, node
     ..scope = scope
@@ -104,9 +104,10 @@ function select-assign node, scope
   change-name node, if node.op == \= then \Declare else \Assign=
   t node, scope
 
-function lval node
-  change-name node, lval[node-type node]
-  node
+function lval index => (children) ->
+  children <<< (index): list-apply children[index], ->
+    change-name it, lval[node-type it] || node-type it
+
 lval <<< Var: \Local Key: \Local \
 Arr: \ArrayPattern Obj: \ObjectPattern Prop: \PropertyPattern
 
@@ -191,12 +192,18 @@ t <<<
   Literal: -> literals[it.value] or t.valueToNode eval it.value
   Key: -> t.id it.name
   Var: -> (t.id it.value) <<< scope: (it.value): REF
-  Local: -> (t.id it.value) <<< scope: (it.value): DECL
+  Local: ->
+    name = it.value || it.name
+    (t.id name) <<< scope: (name): DECL
 
   Arr: define build: \arrayExpression
-  ArrayPattern: define build: \arrayPattern transform: lval
   Obj: define build: \objectExpression types: [property]
   Prop: define build: \objectProperty params: property-params
+  ArrayPattern: define build: \arrayPattern transform: lval 0
+  ObjectPattern: define do
+    build: \objectPattern types: [property] transform: lval 0
+  PropertyPattern: define do
+    build: \objectProperty params: property-params, transform: lval 1
 
   Import: select-import
   Module: module-io
@@ -208,7 +215,7 @@ t <<<
 
   Assign: select-assign
   Declare: define build: \assignmentExpression params: assign-params
-                , transform: lval
+                , transform: lval 0
   \Assign= : define build: \assignmentExpression params: assign-params
 
   Block: define do
@@ -217,7 +224,7 @@ t <<<
     output: make-block
 
   Fun: define do
-    build: \functionExpression transform: lval
+    build: \functionExpression transform: lval 0
     input: (, node) -> if node.params.length == 0 then it: DECL else {}
     output: make-function
     params: (args, node) -> [t.id node.name || ''] ++ args

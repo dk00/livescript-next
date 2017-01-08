@@ -8,6 +8,20 @@ function main t
 
   [c] = [a]
   t.equal c, a, 'destructuring assignment: array'
+
+  {a: d} = {a}
+  t.equal d, a, 'destructuring assignment: object'
+
+  {e} = {e: a}
+  t.equal e, a, 'destructuring assignment: object shorthand'
+
+  [i: h: [g: f]] = [i: h: [g: a]]
+  t.equal f, a, 'nested destructuring'
+
+  g = {}
+  [g.h, {a: g.i}] = [a, {a}]
+  t.equal g.h, g.i, 'destructuring assignment: object member'
+
   t.end!
 
 export default: main
