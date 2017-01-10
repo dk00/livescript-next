@@ -157,6 +157,7 @@ result =
       node
     , Object.assign {} node
   BlockStatement: ({body}: node, fn) ->
+    return node if body.length < 1
     last = body.length - 1
     Object.assign {} node, body:
       Object.assign [] body, (last): convert-result body[last], fn
@@ -191,6 +192,7 @@ function wrap-expression node, index
 expr = derive (node, index) ->
   | t.isExpression node or t.isPattern node => node
   | node.expression => that
+  | t.isFunction node => node <<< type: \FunctionExpression
   | _ => wrap-expression node, index
 
 literals = arguments: t.identifier \arguments
