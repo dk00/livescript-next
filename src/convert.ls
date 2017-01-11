@@ -11,12 +11,14 @@ function node-name
   return eval it.value if \Literal == node-type it
   it.name || it.value
 
-function t node, scope
+function t original, scope
+  node = t.transform[node-type original]? original, scope or original
   convert-node = t[node-type node] || t.unk
   node.children .= map -> if \string == typeof it then node[it] else it
   convert-node node, scope
-    ..loc = L node
+    ..loc = L original
 t <<< types
+t.transform = {}
 t <<< # work around babel/babel#4741
   arrayPattern: (elements) -> type: \ArrayPattern elements
   objectProperty: (key, value, computed, shorthand) ->
@@ -64,15 +66,11 @@ function change-name node, name => node <<< constructor: display-name: name
 
 # Module
 
-function select-import node, scope
-  change-name node, import-type node, scope
-  t node, scope
+is-import = (.value == \this)
+function is-module {left}, scope
+  (is-import left or left.verb == \out) && scope.__proto__ == TOP
 
-importing-module = (.value == \this)
-function import-type {left}, scope
-  if (importing-module left or left.verb == \out) && scope.__proto__ == TOP
-    \Module
-  else \ObjectImport
+t.transform.Import = (node, scope) -> change-name node, \Module
 
 function pack-export => [;* void it]
 function pack-import => it.map ([source, name]) -> ;* source, [[name]]
@@ -90,7 +88,7 @@ function module-io {left, right} scope
   items = list expand-pair t right, scope
   base = items.filter -> !it.1.map
   extended = items.filter (.1.map)
-  [...lines, last] = module-declare extended, base, ...if importing-module left
+  [...lines, last] = module-declare extended, base, ...if is-import left
     * t.importDeclaration, specify-import, pack-import
   else
     * t.exportNamedDeclaration.bind void void; t.exportSpecifier, pack-export
@@ -214,9 +212,7 @@ function member-params [object, property]
 
 t <<<
   id: -> t.identifier it
-  unk: ->
-    it.tab = ''
-    t.string-literal <| it.compile-node indent: '' .toString!
+  unk: -> throw "Unimplemented node type: #{node-type it}"
   return: -> t.returnStatement expr it
 
   Literal: -> literals[it.value] or t.valueToNode eval it.value
@@ -235,7 +231,6 @@ t <<<
   PropertyPattern: define do
     build: \objectProperty params: property-params, transform: lval 1
 
-  Import: select-import
   Module: module-io
 
   Parens: (node, scope) -> t node.it, scope

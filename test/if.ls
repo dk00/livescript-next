@@ -6,7 +6,7 @@ function main t
   if false then counter = 2 else counter = 1
   t.equal counter, 1 'if statement: else'
   t.ok if true then true else false, 'if is an expression'
-  a = -> if true then true
+  a = -> if true then true else ->
   t.ok a!, 'return from if expression'
 
   t.end!

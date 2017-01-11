@@ -7,7 +7,6 @@ function main t
   t.equal name, local, 'named import/export'
   t.equal local, alias, 'import with alias'
   t.ok tape, 'shorthand import'
-  '' import ''
   t.end!
 
 export default: main
