@@ -14,7 +14,7 @@ function node-name
 function t original, scope
   node = t.transform[node-type original]? original, scope or original
   convert-node = t[node-type node] || t.unk
-  node.children .= map -> if \string == typeof it then node[it] else it
+  node.children .= map (node.)
   convert-node node, scope
     ..loc = L original
 t <<< types
@@ -70,7 +70,8 @@ is-import = (.value == \this)
 function is-module {left}, scope
   (is-import left or left.verb == \out) && scope.__proto__ == TOP
 
-t.transform.Import = (node, scope) -> change-name node, \Module
+t.transform.Import = (node, scope) ->
+  if is-module node, scope then change-name node, \Module else node
 
 function pack-export => [;* void it]
 function pack-import => it.map ([source, name]) -> ;* source, [[name]]
@@ -103,9 +104,8 @@ function map-values object, value
 
 # Assign
 
-function select-assign node, scope
-  change-name node, if node.op == \= then \Declare else \Assign=
-  t node, scope
+t.transform.Assign = (node, scope) ->
+  if node.op == \= then change-name node, \Declare else node
 
 function lval index => (children) ->
   children <<< (index): list-apply children[index], ->
@@ -115,6 +115,10 @@ lval <<< Var: \Local Key: \Local \
 Arr: \ArrayPattern Obj: \ObjectPattern Prop: \PropertyPattern
 
 function assign-params args, node => [node.op] ++ args
+
+function object-import target, source
+  assign = t.memberExpression (t.id \Object), t.id \assign
+  t.callExpression assign, [target, source]
 
 function rewrap {head, tails}
   tails.reduce _, head <| (tree, node) ->
@@ -238,10 +242,11 @@ t <<<
   Call: define build: \callExpression
   Chain: (node, scope) -> t _, scope <| rewrap node
 
-  Assign: select-assign
   Declare: define build: \assignmentExpression params: assign-params
                 , transform: lval 0
-  \Assign= : define build: \assignmentExpression params: assign-params
+  Assign: define build: \assignmentExpression params: assign-params
+  object-import: object-import
+  Import: define build: \objectImport
 
   Block: define do
     build: \blockStatement types: [statement] input: ->
