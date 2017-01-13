@@ -22,6 +22,9 @@ function main t
   [g.h, {a: g.i}] = [a, {a}]
   t.equal g.h, g.i, 'destructuring assignment: object member'
 
+  unwrapped = void = null = 1
+  t.equal unwrapped, 1 'unwrap assignment to void'
+
   t.end!
 
 export default: main

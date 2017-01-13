@@ -1,4 +1,6 @@
 function main t
+  t.equal 1 + 1 2 'binary expression +'
+  t.equal -(-1), 1 'unary expression -'
 
   result = {a: 1} <<< (b: 2)
   expecetd = a: 1 b: 2

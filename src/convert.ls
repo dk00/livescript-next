@@ -11,18 +11,17 @@ function node-name
   return eval it.value if \Literal == node-type it
   it.name || it.value
 
+function transform node, scope
+  next = transform[node-type node]? node, scope
+  if next && next != node then transform next else node
+
 function t original, scope
-  node = t.transform[node-type original]? original, scope or original
+  node = transform original, scope
   convert-node = t[node-type node] || t.unk
   node.children .= map (node.)
   convert-node node, scope
     ..loc = L original
 t <<< types
-t.transform = {}
-t <<< # work around babel/babel#4741
-  arrayPattern: (elements) -> type: \ArrayPattern elements
-  objectProperty: (key, value, computed, shorthand) ->
-    {type: \ObjectProperty key, value, computed, shorthand}
 
 function merge scope, nested
   if nested
@@ -46,10 +45,9 @@ function reduce children, upper, types
     [args ++ [sub-args] lines.concat sub-lines; next-scope]
   , [[] [] Object.create upper]
 
-function define {types=none, transform=pass, input=pass, output=pass, params=pass, build}
+function define {types=none, input=pass, output=pass, params=pass, build}
 => (node, upper) ->
   scope = input upper, node
-  node.children = transform node.children
   [nodes, lines, scope] = reduce node.children, scope, types
   [nodes, scope] = output [nodes, scope] upper, node
   lines = [] if build == \blockStatement
@@ -70,8 +68,9 @@ is-import = (.value == \this)
 function is-module {left}, scope
   (is-import left or left.verb == \out) && scope.__proto__ == TOP
 
-t.transform.Import = (node, scope) ->
-  if is-module node, scope then change-name node, \Module else node
+transform.Import = (node, scope) ->
+  if is-module node, scope then change-name node, \Module
+  else node <<< op: \import + (node.all || '')
 
 function pack-export => [;* void it]
 function pack-import => it.map ([source, name]) -> ;* source, [[name]]
@@ -93,30 +92,59 @@ function module-io {left, right} scope
     * t.importDeclaration, specify-import, pack-import
   else
     * t.exportNamedDeclaration.bind void void; t.exportSpecifier, pack-export
-
   last <<< {lines}
 
 function map-values object, value
-  Object.keys object .reduce (result, key) ->
+  Object.keys object .reduce _, {} <| (result, key) ->
     result[key]? = value object[key]
     result
-  , {}
 
 # Assign
 
-t.transform.Assign = (node, scope) ->
-  if node.op == \= then change-name node, \Declare else node
+function mark-lval => it <<< lval: true
 
-function lval index => (children) ->
-  children <<< (index): list-apply children[index], ->
-    change-name it, lval[node-type it] || node-type it
+NONE = {+void, +null}
+transform.Assign = (node, scope) ->
+  | NONE[node.left.value] => node.right
+  | node.op == \= => node <<< left: mark-lval node.left
+  | _ => node
 
-lval <<< Var: \Local Key: \Local \
-Arr: \ArrayPattern Obj: \ObjectPattern Prop: \PropertyPattern
+transform.Arr = transform.Obj = (node, scope) ->
+  return node unless node.lval
+  node <<< items: node.items.map mark-lval
 
-function assign-params args, node => [node.op] ++ args
+transform.Prop = (node, scope) ->
+  return node unless node.lval
+  node <<< val: mark-lval node.val
 
-function object-import target, source
+function convert-variable
+  name = it.value || it.name
+  variable = t.id name
+  type = if it.lval then DECL else if it.value then REF
+  if type then variable <<< scope: (name): type
+  else variable
+
+t.assignment = (op, left, right) ->
+  t.assignmentExpression op, (lval left), right
+
+# Infix
+
+convert-infix = define build: \infixExpression params: infix-params
+function infix-params args, node => [node.op] ++ args
+
+binary-types = t.BINARY_OPERATORS.reduce (types, op) ->
+  types <<< (op): \binaryExpression
+, t.LOGICAL_OPERATORS.reduce (types, op) ->
+  types <<< (op): \logicalExpression
+, (t.NUMBER_BINARY_OPERATORS.concat ['' \+])reduce (types, op) ->
+  types <<< (op+\=): \assignment
+, import: \objectImport
+
+t.infix-expression = (op, left, right) ->
+  if right then t[binary-types[op]] op, left, right
+  else t.unaryExpression op, left
+
+t.object-import = (op, target, source) ->
   assign = t.memberExpression (t.id \Object), t.id \assign
   t.callExpression assign, [target, source]
 
@@ -141,9 +169,7 @@ function close-scope upper, scope
 
 function make-block [[body] scope] upper
   [declarations, referenced] = close-scope upper, scope
-  body = body.reduce (body, node) ->
-    body ++= node.lines ++ node
-  , []
+  body = body.reduce _, [] <| (body, node) -> body ++= node.lines ++ node
   body.unshift that if declarations
   scope = {[k, scope[k]] for k in referenced}
   [[body] scope]
@@ -151,6 +177,8 @@ function make-block [[body] scope] upper
 function omit-declared => it if it < DECL
 
 # Function
+
+transform.Fun = (node, _) -> node <<< params: node.params.map mark-lval
 
 result =
   IfStatement: (node, fn) ->
@@ -176,6 +204,10 @@ function make-function [[params, block]]
   [[params, convert-result block, t.return] scope]
 
 #Child types
+
+function lval => if t.isLVal it then it else
+  it <<< type: it.type.replace \Expression \Pattern
+
 function derive adapt => (node, index) ->
   (adapt node, index) <<< node{loc}
     ..lines = [] ++ (node.lines || []) ++ (..pre || [])
@@ -215,25 +247,16 @@ function member-params [object, property]
   [object, property, property.type != \Identifier]
 
 t <<<
-  id: -> t.identifier it
+  id: -> (t.identifier it) <<< lines: []
   unk: -> throw "Unimplemented node type: #{node-type it}"
   return: -> t.returnStatement expr it
 
   Literal: -> literals[it.value] or t.valueToNode eval it.value
-  Key: -> t.id it.name
-  Var: -> (t.id it.value) <<< scope: (it.value): REF
-  Local: ->
-    name = it.value || it.name
-    (t.id name) <<< scope: (name): DECL
+  Key: convert-variable, Var: convert-variable
 
   Arr: define build: \arrayExpression
   Obj: define build: \objectExpression types: [property]
   Prop: define build: \objectProperty params: property-params
-  ArrayPattern: define build: \arrayPattern transform: lval 0
-  ObjectPattern: define do
-    build: \objectPattern types: [property] transform: lval 0
-  PropertyPattern: define do
-    build: \objectProperty params: property-params, transform: lval 1
 
   Module: module-io
 
@@ -242,11 +265,8 @@ t <<<
   Call: define build: \callExpression
   Chain: (node, scope) -> t _, scope <| rewrap node
 
-  Declare: define build: \assignmentExpression params: assign-params
-                , transform: lval 0
-  Assign: define build: \assignmentExpression params: assign-params
-  object-import: object-import
-  Import: define build: \objectImport
+  Unary: convert-infix, Binary: convert-infix, Assign: convert-infix
+  Import: convert-infix
 
   Block: define do
     build: \blockStatement types: [statement] input: ->
@@ -254,7 +274,7 @@ t <<<
     output: make-block
 
   Fun: define do
-    build: \functionExpression types: [void statement] transform: lval 0
+    build: \functionExpression types: [lval, statement]
     input: (, node) -> if node.params.length == 0 then it: DECL else {}
     output: make-function
     params: (args, node) -> [t.id node.name || ''] ++ args
