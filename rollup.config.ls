@@ -13,5 +13,5 @@ function transform code, name
 resolve = node-resolve extensions: <[.ls .js]>
 export
   plugins: [resolve, {transform}]
-  moduleName: require \./package.json .name
+  moduleName: \lsnext
   exports: \named use-strict: false

@@ -1,8 +1,7 @@
 ``
-import livescript from 'livescript'
 import * as Babel from 'babel-core'
-import convert from './convert'``
+import parse from './parse'``
 
-function compile file => Babel.transformFromAst convert livescript.ast file
+function compile code => Babel.transform code, parser-opts: parser: parse
 
 ``export default compile``

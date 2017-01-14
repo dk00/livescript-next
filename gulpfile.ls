@@ -17,17 +17,27 @@ function build {dest}: target
     Promise.all [gen-code, gen-map]
 
 external-deps = <[livescript babel-core babel-types]>
+globals =
+  livescript: "require('livescript')"
+  \babel-types : '''(() => {
+    let types
+    Babel.transform('1', {plugins: [it => (types = it.types, {visitor: {}})]})
+    return types
+  })()'''
 
 gulp.task \dist ->
-  files = <[compile convert register index]>
+  files = <[compile parse convert register index]>
   external = external-deps ++ files.map -> require.resolve "./src/#it"
-  Promise.all <[lib]>map (path) ->
+  Promise.all <[es lib dist]>map (path) ->
     new Promise (resolve) -> mkdir path, resolve
   .then ->
-    tasks = files.map ->
-      build entry: "src/#it.ls" external, dest: "lib/#it.js" format: \cjs \
-      source-map: true
-    Promise.all tasks
+    tasks = files.map (name) ->
+      Promise.all [[\es \es] [\lib \cjs]]map ([dest, format]) ->
+        build entry: "src/#name.ls" external, source-map: true \
+        dest: "#dest/#name.js" format
+    Promise.all tasks ++ build {globals} <<<
+      entry: "src/index.ls" external: external-deps,
+      dest: "dist/index.js" format: \iife
 
 gulp.task \default <[dist]> ->
   {status} = spawnSync \istanbul <[cover lsc test/run]> stdio: \inherit
