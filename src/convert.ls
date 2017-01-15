@@ -4,12 +4,9 @@ function L
   start: line: it.first_line, column: it.first_column
   end: line: it.last_line, column: it.last_column
 
-[none = [] empty = {} TOP = {} REF = 1 ASSIGN = 2 DECL = 4 PARAM = 8]
+* none = [] empty = {} TOP = {} REF = 1 ASSIGN = 2 DECL = 4
 function pass => it
 node-type = (.constructor.display-name)
-function node-name
-  return eval it.value if \Literal == node-type it
-  it.name || it.value
 
 function transform node, scope
   next = transform[node-type node]? node, scope
@@ -30,28 +27,27 @@ function merge scope, nested
 
 function list-apply whatever, fn => whatever.map? fn or fn whatever
 
-function convert-arg arg, scope, convert-type, index
-  []concat arg .reduce ([nodes, lines, scope] arg, sub-index) ->
-    return [nodes ++ arg, lines, scope] unless arg
-    node = convert-type (t arg, scope), index + 4*(sub-index || 0)
-    [nodes ++ node; lines.concat node.lines; merge scope, node.scope]
-  , [[] [] scope]
+function convert-arg arg, scope, convert-type
+  []concat arg .reduce ([nodes, scope] arg) ->
+    return [nodes ++ arg, scope] unless arg
+    node = convert-type t arg, scope
+    * nodes ++ node, merge scope, node.scope
+  , [[] scope]
     ..0 = ..0.0 unless arg?reduce
 
 function reduce children, upper, types
-  children.reduce ([args, lines, scope] arg, index) ->
-    [sub-args, sub-lines, next-scope] =
-      convert-arg arg, scope, types[index] || expr, index
-    [args ++ [sub-args] lines.concat sub-lines; next-scope]
-  , [[] [] Object.create upper]
+  children.reduce ([args, scope] arg, index) ->
+    [sub-args, next-scope] =
+      convert-arg arg, scope, types[index] || expr
+    * args ++ [sub-args] next-scope
+  , [[] Object.create upper]
 
 function define {types=none, input=pass, output=pass, params=pass, build}
 => (node, upper) ->
-  scope = input upper, node
-  [nodes, lines, scope] = reduce node.children, scope, types
-  [nodes, scope] = output [nodes, scope] upper, node
-  lines = [] if build == \blockStatement
-  (t[build] ...params nodes, node) <<< {scope, lines}
+  [nodes, scope] = output _, upper
+  <| reduce node.children, _, types
+  <| input upper, node
+  (t[build] ...params nodes, node) <<< {scope}
 
 function expand-pair
   if it.type == \Identifier then [[it, it]] else it
@@ -65,7 +61,7 @@ function change-name node, name => node <<< constructor: display-name: name
 # Module
 
 is-import = (.value == \this)
-function is-module {left}, scope
+function is-module {left} scope
   (is-import left or left.verb == \out) && scope.__proto__ == TOP
 
 transform.Import = (node, scope) ->
@@ -88,11 +84,10 @@ function module-io {left, right} scope
   items = list expand-pair t right, scope
   base = items.filter -> !it.1.map
   extended = items.filter (.1.map)
-  [...lines, last] = module-declare extended, base, ...if is-import left
+  t.blockStatement module-declare extended, base, ...if is-import left
     * t.importDeclaration, specify-import, pack-import
   else
     * t.exportNamedDeclaration.bind void void; t.exportSpecifier, pack-export
-  last <<< {lines}
 
 function map-values object, value
   Object.keys object .reduce _, {} <| (result, key) ->
@@ -129,6 +124,8 @@ t.assignment = (op, left, right) ->
 
 # Infix
 
+transform.Parens = (node, scope) -> node.it
+
 convert-infix = define build: \infixExpression params: infix-params
 function infix-params args, node => [node.op] ++ args
 
@@ -149,11 +146,9 @@ t.object-import = (op, target, source) ->
   assign = t.memberExpression (t.id \Object), t.id \assign
   t.callExpression assign, [target, source]
 
-function rewrap {head, tails}
+transform.Chain = ({head, tails}) ->
   tails.reduce _, head <| (tree, node) ->
-    key = node.children.0
-    node{(key), constructor} <<<
-      base: tree, children: [\base] ++ node.children
+    node <<< base: tree, children: [\base] ++ node.children
 
 # Block
 
@@ -166,14 +161,14 @@ function close-scope upper, scope
     declared = ..filter to-declare
     referenced = ..filter -> !to-declare it
   declarations = declare declared if declared.length > 0
-  [declarations, referenced]
+  * declarations, referenced
 
 function make-block [[body] scope] upper
   [declarations, referenced] = close-scope upper, scope
-  body = body.reduce _, [] <| (body, node) -> body ++= node.lines ++ node
-  body.unshift that if declarations
-  scope = {[k, scope[k]] for k in referenced}
-  [[body] scope]
+  body = body.reduce (body, node) ->
+    body ++= if t.isBlock node then node.body else node
+  , if declarations then [that] else []
+  * [body] scope = {[k, scope[k]] for k in referenced}
 
 function omit-declared => it if it < DECL
 
@@ -181,28 +176,18 @@ function omit-declared => it if it < DECL
 
 transform.Fun = (node, _) -> node <<< params: node.params.map mark-lval
 
-result =
-  IfStatement: (node, fn) ->
-    <[consequent alternate]>reduce (node, key) ->
-      node[key] &&= convert-result node[key], fn
-      node
-    , Object.assign {} node
-  BlockStatement: ({body}: node, fn) ->
-    return node if body.length < 1
-    last = body.length - 1
-    Object.assign {} node, body:
-      Object.assign [] body, (last): convert-result body[last], fn
-
-function convert-result node, fn
-  return that node, fn if result[node.type]
-  fn node
+function convert-return node
+  [..., last] = node.body
+  if last && !t.isReturnStatement last
+    node.body[*-1] = t.returnStatement expr last
+  node
 
 function make-function [[params, block]]
   if params.length == 0 && block.scope.it
-    params.push t.id \it
+    params = [t.id \it]
     block.scope.it = DECL
-  scope = map-values block.scope, omit-declared
-  [[params, convert-result block, t.return] scope]
+  * * params, convert-return block
+    scope = map-values block.scope, omit-declared
 
 #Child types
 
@@ -212,9 +197,8 @@ function lval
     | t.isSpreadElement it => \RestElement
     | _ => it.type.replace \Expression \Pattern
 
-function derive adapt => (node, index) ->
-  (adapt node, index) <<< node{loc}
-    ..lines = [] ++ (node.lines || []) ++ (..pre || [])
+function derive adapt => (node) ->
+  (adapt node) <<< node{loc}
     ..scope = merge node.scope, ..scope
 
 statement = derive ->
@@ -222,16 +206,13 @@ statement = derive ->
   | t.isExpression it => t.expressionStatement it
   | _ => it
 
-function wrap-expression node, index
-  cache = t.id name = "ref#{index}$"
-  node = convert-result node, -> t.assignmentExpression \= cache, expr it
-  cache <<< pre: [node] scope: (name): DECL
+function wrap-expression node => t.doExpression t.blockStatement [node]
 
-expr = derive (node, index) ->
+expr = derive (node) ->
   | t.isExpression node or t.isSpreadElement node => node
   | node.expression => that
   | t.isFunction node => node <<< type: \FunctionExpression
-  | _ => wrap-expression node, index
+  | _ => wrap-expression node
 
 literals = <[this arguments eval]>reduce (data, name) ->
   data <<< (name): t.identifier name
@@ -247,17 +228,16 @@ property = derive ->
   | _ => t.objectProperty ...property-params [it, it]
 
 function property-params [key, value]
-  computed = key.type != \Identifier && key.type != \Literal
-  shorthand = key == value
-  [key, value, computed, shorthand]
+  * key, value
+    computed = key.type != \Identifier && key.type != \Literal
+    shorthand = key == value
 
 function member-params [object, property]
-  [object, property, property.type != \Identifier]
+  * object, property, property.type != \Identifier
 
 t <<<
-  id: -> (t.identifier it) <<< lines: []
+  id: -> t.identifier it
   unk: -> throw "Unimplemented node type: #{node-type it}"
-  return: -> if t.isReturnStatement it then it else t.returnStatement expr it
 
   Literal: -> literals[it.value] or t.valueToNode eval it.value
   Key: convert-variable, Var: convert-variable
@@ -268,10 +248,8 @@ t <<<
 
   Module: module-io
 
-  Parens: (node, scope) -> t node.it, scope
   Index: define build: \memberExpression params: member-params
   Call: define build: \callExpression
-  Chain: (node, scope) -> t _, scope <| rewrap node
 
   Unary: convert-infix, Binary: convert-infix, Assign: convert-infix
   Import: convert-infix
