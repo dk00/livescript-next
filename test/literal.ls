@@ -9,6 +9,8 @@ function object t
   t.equal c.shorthand, shorthand, 'shorthand string'
   d = {(a.property): value}
   t.equal d.value, value, 'computed property'
+  expected = {property: value, another: 1}
+  t.deep-equal {another: 1 ...a} expected, 'spread property'
   t.end!
 
 function array t
@@ -17,6 +19,8 @@ function array t
   t.equal a.0, 1 'number index & literal element'
   t.equal a.1.0, 2 'nested element'
   t.equal a.2, b, 'variable element'
+  c = [1 2]
+  t.deep-equal [0 ...c] [0 1 2] 'spread element'
   t.end!
 
 function main t

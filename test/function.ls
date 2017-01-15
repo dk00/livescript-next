@@ -5,7 +5,18 @@ function main t
   a a
   b = -> ->
   t.ok b!, 'return an empty function'
-  [1 [t]] |> ([b, [c]]) -> t.equal c, t, 'destructured prarmeter'
+  c = ->
+    return true
+    t.fail 'early return'
+  t.ok c!, 'early return'
+  d = -> return true
+  t.ok d!, 'explicit return'
+
+  [1 [t]] |> ([b, [c]]) -> t.equal c, t, 'destructured parameter'
+
+  get-rest = (...r) -> r
+  t.deep-equal (get-rest 0 1), [0 1] 'pack rest parameters'
+
   t.end!
 
 export default: main

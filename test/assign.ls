@@ -22,9 +22,14 @@ function main t
   [g.h, {a: g.i}] = [a, {a}]
   t.equal g.h, g.i, 'destructuring assignment: object member'
 
+  [,, ...rest] = [0 to 3]
+  t.deep-equal rest, [2 3], 'array destructure with rest operator'
+
+  {a, ...rest} = a: 1 b: 2 c: 3
+  t.deep-equal rest, b: 2 c: 3, 'object destructure with rest operator'
+
   unwrapped = void = null = 1
   t.equal unwrapped, 1 'unwrap assignment to void'
-
   t.end!
 
 export default: main

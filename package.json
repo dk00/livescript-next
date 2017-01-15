@@ -22,6 +22,7 @@
   "devDependencies": {
     "babel-core": "",
     "babel-preset-es2015": "",
+    "babel-preset-stage-0": "",
     "babel-register": "",
     "gulp": "",
     "istanbul": "",

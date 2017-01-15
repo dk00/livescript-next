@@ -101,7 +101,7 @@ function map-values object, value
 
 # Assign
 
-function mark-lval => it <<< lval: true
+function mark-lval => if it.value != \void then it <<< lval: true else null
 
 NONE = {+void, +null}
 transform.Assign = (node, scope) ->
@@ -109,13 +109,13 @@ transform.Assign = (node, scope) ->
   | node.op == \= => node <<< left: mark-lval node.left
   | _ => node
 
-transform.Arr = transform.Obj = (node, scope) ->
+function transform-lval key => (node, scope) ->
   return node unless node.lval
-  node <<< items: node.items.map mark-lval
+  node <<< (key): list-apply node[key], mark-lval
 
-transform.Prop = (node, scope) ->
-  return node unless node.lval
-  node <<< val: mark-lval node.val
+transform.Arr = transform.Obj = transform-lval \items
+transform.Prop = transform-lval \val
+transform.Splat = transform-lval \it
 
 function convert-variable
   name = it.value || it.name
@@ -137,10 +137,11 @@ binary-types = t.BINARY_OPERATORS.reduce (types, op) ->
 , t.LOGICAL_OPERATORS.reduce (types, op) ->
   types <<< (op): \logicalExpression
 , (t.NUMBER_BINARY_OPERATORS.concat ['' \+])reduce (types, op) ->
-  types <<< (op+\=): \assignment
+  types <<< "#op=": \assignment
 , import: \objectImport
 
 t.infix-expression = (op, left, right) ->
+  op .= replace /\.(.)\./ \$1
   if right then t[binary-types[op]] op, left, right
   else t.unaryExpression op, left
 
@@ -205,8 +206,11 @@ function make-function [[params, block]]
 
 #Child types
 
-function lval => if t.isLVal it then it else
-  it <<< type: it.type.replace \Expression \Pattern
+function lval
+  return it if t.isLVal it
+  it <<< type:
+    | t.isSpreadElement it => \RestElement
+    | _ => it.type.replace \Expression \Pattern
 
 function derive adapt => (node, index) ->
   (adapt node, index) <<< node{loc}
@@ -224,18 +228,22 @@ function wrap-expression node, index
   cache <<< pre: [node] scope: (name): DECL
 
 expr = derive (node, index) ->
-  | t.isExpression node or t.isPattern node => node
+  | t.isExpression node or t.isSpreadElement node => node
   | node.expression => that
   | t.isFunction node => node <<< type: \FunctionExpression
   | _ => wrap-expression node, index
 
-literals = arguments: t.identifier \arguments
+literals = <[this arguments eval]>reduce (data, name) ->
+  data <<< (name): t.identifier name
+, void: t.unaryExpression \void t.valueToNode 8
+
 string-literal = derive ->
   | it.type == \StringLiteral => it
   | it.name => t.stringLiteral that
 
 property = derive ->
   | it.type == \ObjectProperty => it
+  | t.isSpreadElement it => it <<< type: \SpreadProperty
   | _ => t.objectProperty ...property-params [it, it]
 
 function property-params [key, value]
@@ -249,7 +257,7 @@ function member-params [object, property]
 t <<<
   id: -> (t.identifier it) <<< lines: []
   unk: -> throw "Unimplemented node type: #{node-type it}"
-  return: -> t.returnStatement expr it
+  return: -> if t.isReturnStatement it then it else t.returnStatement expr it
 
   Literal: -> literals[it.value] or t.valueToNode eval it.value
   Key: convert-variable, Var: convert-variable
@@ -267,12 +275,14 @@ t <<<
 
   Unary: convert-infix, Binary: convert-infix, Assign: convert-infix
   Import: convert-infix
+  Splat: define build: \spreadElement
 
   Block: define do
     build: \blockStatement types: [statement] input: ->
       if it == TOP then it else {}
     output: make-block
 
+  Return: define build: \returnStatement
   Fun: define do
     build: \functionExpression types: [lval, statement]
     input: (, node) -> if node.params.length == 0 then it: DECL else {}
