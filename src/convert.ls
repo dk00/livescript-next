@@ -119,15 +119,16 @@ function convert-variable
   if type then variable <<< scope: (name): type
   else variable
 
-t.assignment = (op, left, right) ->
-  t.assignmentExpression op, (lval left), right
+t.assignment = (op, left, right, logic) ->
+  assign = t.assignmentExpression op, (lval left), right
+  if logic then t[binary-types[logic]] logic, left, assign else assign
 
 # Infix
 
 transform.Parens = (node, scope) -> node.it
 
 convert-infix = define build: \infixExpression params: infix-params
-function infix-params args, node => [node.op] ++ args
+function infix-params args, node => [node.op] ++ args ++ node.logic
 
 binary-types = t.BINARY_OPERATORS.reduce (types, op) ->
   types <<< (op): \binaryExpression
@@ -135,12 +136,19 @@ binary-types = t.BINARY_OPERATORS.reduce (types, op) ->
   types <<< (op): \logicalExpression
 , (t.NUMBER_BINARY_OPERATORS.concat ['' \+])reduce (types, op) ->
   types <<< "#op=": \assignment
-, import: \objectImport
+, import: \objectImport \? : \ifExist
 
-t.infix-expression = (op, left, right) ->
+t.infix-expression = (op, left, right, logic) ->
   op .= replace /\.(.)\./ \$1
-  if right then t[binary-types[op]] op, left, right
-  else t.unaryExpression op, left
+  build = t[binary-types[op]]
+  switch
+  | logic => build op, left, right, logic
+  | right => build op, left, right
+  | _ => t.unaryExpression op, left
+
+t.existence = -> t.binaryExpression \!= it, t.nullLiteral!
+t.if-exist = (logic, left, right) ->
+  t.conditionalExpression (t.existence left), left, right
 
 t.object-import = (op, target, source) ->
   assign = t.memberExpression (t.id \Object), t.id \assign
@@ -252,7 +260,7 @@ t <<<
   Call: define build: \callExpression
 
   Unary: convert-infix, Binary: convert-infix, Assign: convert-infix
-  Import: convert-infix
+  Import: convert-infix, Existence: define build: \existence
   Splat: define build: \spreadElement
 
   Block: define do

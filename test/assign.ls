@@ -6,6 +6,15 @@ function main t
   a += a
   t.equal a, 2, 'shorthand assignment: add to'
 
+  * a = 1 c = 0
+  * a ||= 2 c ||= 2
+  t.deep-equal [a, c] [1 2] 'conditional assignment ||'
+
+  * a = 0 c = void
+  * a ?= 2 c ?= 2
+  t.deep-equal [a, c] [0 2] 'conditional assignment ?'
+
+
   [c] = [a]
   t.equal c, a, 'destructuring assignment: array'
 
