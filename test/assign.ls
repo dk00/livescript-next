@@ -37,6 +37,12 @@ function main t
   {a, ...rest} = a: 1 b: 2 c: 3
   t.deep-equal rest, b: 2 c: 3, 'object destructure with rest operator'
 
+  [array-def=1] = []
+  t.equal array-def, 1 'destructure array with default values'
+
+  {object-def=1} = {}
+  t.equal object-def, 1 'destructure object with default values'
+
   unwrapped = void = null = 1
   t.equal unwrapped, 1 'unwrap assignment to void'
   t.end!

@@ -19,6 +19,9 @@ function t original, scope
   convert-node node, scope
     ..loc = L original
 t <<< types
+# work around babel/babel#4741
+t.objectProperty = (key, value, computed, shorthand) ->
+  {type: \ObjectProperty key, value, computed, shorthand}
 
 function merge scope, nested
   if nested
@@ -104,13 +107,17 @@ transform.Assign = (node, scope) ->
   | node.op == \= => node <<< left: mark-lval node.left
   | _ => node
 
-function transform-lval key => (node, scope) ->
+function transform-lval index=0 => (node, scope) ->
   return node unless node.lval
+  key = node.children[index]
   node <<< (key): list-apply node[key], mark-lval
 
-transform.Arr = transform.Obj = transform-lval \items
-transform.Prop = transform-lval \val
-transform.Splat = transform-lval \it
+<[Arr Obj Splat Existence]>forEach -> transform[it] = transform-lval!
+transform.Binary = (node, scope) ->
+  return unless node.lval
+  next = change-name _, \Assign <| transform-lval! node, scope
+  next <<< op: \=
+transform.Prop = transform-lval 1
 
 function convert-variable
   name = it.value || it.name
@@ -233,6 +240,8 @@ string-literal = derive ->
 property = derive ->
   | it.type == \ObjectProperty => it
   | t.isSpreadElement it => it <<< type: \SpreadProperty
+  | it.type == \AssignmentExpression =>
+    t.objectProperty it.left, it <<< type: \AssignmentPattern, false true
   | _ => t.objectProperty ...property-params [it, it]
 
 function property-params [key, value]
