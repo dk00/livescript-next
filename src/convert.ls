@@ -9,13 +9,13 @@ function pass => it
 node-type = (.constructor.display-name)
 
 function transform node, scope
+  node.children .= map (node.)
   next = transform[node-type node]? node, scope
   if next && next != node then transform next else node
 
 function t original, scope
   node = transform original, scope
   convert-node = t[node-type node] || t.unk
-  node.children .= map (node.)
   convert-node node, scope
     ..loc = L original
 t <<< types
@@ -23,9 +23,8 @@ t <<< types
 t.objectProperty = (key, value, computed, shorthand) ->
   {type: \ObjectProperty key, value, computed, shorthand}
 
-function merge scope, nested
-  if nested
-    Object.keys nested .forEach (key) -> scope[key] .|.= nested[key]
+function merge scope, nested={}
+  Object.keys nested .forEach (key) -> scope[key] .|.= nested[key]
   scope
 
 function list-apply whatever, fn => whatever.map? fn or fn whatever
@@ -109,8 +108,8 @@ transform.Assign = (node, scope) ->
 
 function transform-lval index=0 => (node, scope) ->
   return node unless node.lval
-  key = node.children[index]
-  node <<< (key): list-apply node[key], mark-lval
+  node.children[index] = list-apply node.children[index], mark-lval
+  node
 
 <[Arr Obj Splat Existence]>forEach -> transform[it] = transform-lval!
 transform.Binary = (node, scope) ->
@@ -153,17 +152,34 @@ t.infix-expression = (op, left, right, logic) ->
   | right => build op, left, right
   | _ => t.unaryExpression op, left
 
-t.existence = -> t.binaryExpression \!= it, t.nullLiteral!
-t.if-exist = (logic, left, right) ->
-  t.conditionalExpression (t.existence left), left, right
+existence =
+  \? : -> t.binaryExpression \!= it, t.nullLiteral!
+  Call: -> t.binaryExpression \==,
+    t.unaryExpression \typeof it
+    t.valueToNode \function
+
+t.existence = existence\?
+t.if-exist = (logic, target, alt, exist) ->
+  check = existence[logic] || existence\?
+  t.conditionalExpression (check target), exist || target, alt
 
 t.object-import = (op, target, source) ->
   assign = t.memberExpression (t.id \Object), t.id \assign
   t.callExpression assign, [target, source]
 
+# Chain
+
 transform.Chain = ({head, tails}) ->
   tails.reduce _, head <| (tree, node) ->
     node <<< base: tree, children: [\base] ++ node.children
+
+function chain-params args, node => [node-type node; node.soak] ++ args
+convert-chain = define build: \chain params: chain-params
+chain-types = Index: \memberExpression Call: \callExpression
+t.chain = (type, soak, ...args) ->
+  args.push args.1.type != \Identifier if type == \Index
+  main = t[chain-types[type]] ...args
+  if soak then t.if-exist type, args.0, literals.void, main else main
 
 # Block
 
@@ -249,9 +265,6 @@ function property-params [key, value]
     computed = key.type != \Identifier && key.type != \Literal
     shorthand = key == value
 
-function member-params [object, property]
-  * object, property, property.type != \Identifier
-
 t <<<
   id: -> t.identifier it
   unk: -> throw "Unimplemented node type: #{node-type it}"
@@ -264,10 +277,7 @@ t <<<
   Prop: define build: \objectProperty params: property-params
 
   Module: module-io
-
-  Index: define build: \memberExpression params: member-params
-  Call: define build: \callExpression
-
+  Index: convert-chain, Call: convert-chain
   Unary: convert-infix, Binary: convert-infix, Assign: convert-infix
   Import: convert-infix, Existence: define build: \existence
   Splat: define build: \spreadElement
