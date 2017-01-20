@@ -8,6 +8,7 @@ function main t
   t.deep-equal [a ? 1 b ? 1] [1 2] 'binary expression ?'
 
   t.ok t?, 'existance ?'
+  t.equal 1 <? 2 1 'binary expression  <?'
 
   result = {a: 1} <<< (b: 2)
   expecetd = a: 1 b: 2

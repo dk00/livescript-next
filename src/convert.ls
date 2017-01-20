@@ -129,6 +129,9 @@ t.assignment = (op, left, right, logic) ->
   assign = t.assignmentExpression op, (lval left), right
   if logic then t[binary-types[logic]] logic, left, assign else assign
 
+t.compare = (op, left, right) ->
+  t.conditional (op.slice 0 2), left, right,, t.assignment \= left, right
+
 # Infix
 
 transform.Parens = (node, scope) -> node.it
@@ -142,7 +145,8 @@ binary-types = t.BINARY_OPERATORS.reduce (types, op) ->
   types <<< (op): \logicalExpression
 , (t.NUMBER_BINARY_OPERATORS.concat ['' \+])reduce (types, op) ->
   types <<< "#op=": \assignment
-, import: \objectImport \? : \ifExist
+, import: \objectImport \<?= : \compare \>?= : \compare
+, \? : \conditional \<? : \conditional \>? : \conditional
 
 t.infix-expression = (op, left, right, logic) ->
   op .= replace /\.(.)\./ \$1
@@ -152,16 +156,18 @@ t.infix-expression = (op, left, right, logic) ->
   | right => build op, left, right
   | _ => t.unaryExpression op, left
 
-existence =
+condition =
   \? : -> t.binaryExpression \!= it, t.nullLiteral!
+  \<? : t.binaryExpression.bind void \<
+  \>? : t.binaryExpression.bind void \>
   Call: -> t.binaryExpression \==,
     t.unaryExpression \typeof it
     t.valueToNode \function
 
-t.existence = existence\?
-t.if-exist = (logic, target, alt, exist) ->
-  check = existence[logic] || existence\?
-  t.conditionalExpression (check target), exist || target, alt
+t.existence = condition\?
+t.conditional = (logic, target, alt, exist, other) ->
+  check = condition[logic] || t.existence
+  t.conditionalExpression (check target, alt), exist || target, other || alt
 
 t.object-import = (op, target, source) ->
   assign = t.memberExpression (t.id \Object), t.id \assign
@@ -179,7 +185,7 @@ chain-types = Index: \memberExpression Call: \callExpression
 t.chain = (type, soak, ...args) ->
   args.push args.1.type != \Identifier if type == \Index
   main = t[chain-types[type]] ...args
-  if soak then t.if-exist type, args.0, literals.void, main else main
+  if soak then t.conditional type, args.0, literals.void, main else main
 
 # Block
 

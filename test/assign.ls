@@ -13,6 +13,9 @@ function main t
   * a = 0 c = void
   * a ?= 2 c ?= 2
   t.deep-equal [a, c] [0 2] 'conditional assignment ?'
+  a = 3
+  a <?= 2
+  t.equal a, 2 'conditional assignment <?'
 
 
   [c] = [a]
