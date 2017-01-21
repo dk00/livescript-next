@@ -68,7 +68,7 @@ function is-module {left} scope
 
 transform.Import = (node, scope) ->
   if is-module node, scope then change-name node, \Module
-  else node <<< op: \import + (node.all || '')
+  else node <<< op: \objectImport + (node.all || '')
 
 function pack-export => [;* void it]
 function pack-import => it.map ([source, name]) -> ;* source, [[name]]
@@ -102,6 +102,10 @@ function mark-lval => if it.value != \void then it <<< lval: true else null
 
 NONE = {+void, +null}
 transform.Assign = (node, scope) ->
+  if \Existence == node-type node.children.0
+    node.children.0 .= it
+    node.soak = \?
+  switch
   | NONE[node.left.value] => node.right
   | node.op == \= => node <<< left: mark-lval node.left
   | _ => node
@@ -125,53 +129,50 @@ function convert-variable
   if type then variable <<< scope: (name): type
   else variable
 
-t.assignment = (op, left, right, logic) ->
-  assign = t.assignmentExpression op, (lval left), right
-  if logic then t[binary-types[logic]] logic, left, assign else assign
+t.assignment = (op, left, right) ->
+  t.assignmentExpression op, (lval left), right
 
-t.compare = (op, left, right) ->
-  t.conditional (op.slice 0 2), left, right,, t.assignment \= left, right
+t\<?= = t\>?= = (op, left, right) ->
+  t.assignment \= left, t[op.slice 0 2] void left, right
 
 # Infix
 
 transform.Parens = (node, scope) -> node.it
 
 convert-infix = define build: \infixExpression params: infix-params
-function infix-params args, node => [node.op] ++ args ++ node.logic
+function infix-params args, node => [node.op] ++ args ++ node<[logic soak]>
 
-binary-types = t.BINARY_OPERATORS.reduce (types, op) ->
-  types <<< (op): \binaryExpression
-, t.LOGICAL_OPERATORS.reduce (types, op) ->
-  types <<< (op): \logicalExpression
-, (t.NUMBER_BINARY_OPERATORS.concat ['' \+])reduce (types, op) ->
-  types <<< "#op=": \assignment
-, import: \objectImport \<?= : \compare \>?= : \compare
-, \? : \conditional \<? : \conditional \>? : \conditional
+t.BINARY_OPERATORS.forEach -> t[it] = t.binaryExpression
+t.LOGICAL_OPERATORS.forEach -> t[it] = t.logicalExpression
+t.NUMBER_BINARY_OPERATORS.concat ['' \+] .forEach -> t"#it=" = t.assignment
 
-t.infix-expression = (op, left, right, logic) ->
+function wrap-condition logic, target, result
+  t[logic]? logic, target, result or result
+
+function wrap-soak type, target, result
+  if type then t\? type, target,, result else result
+
+t.infix-expression = (op, left, right, logic, soak) ->
   op .= replace /\.(.)\./ \$1
-  build = t[binary-types[op]]
-  switch
-  | logic => build op, left, right, logic
-  | right => build op, left, right
-  | _ => t.unaryExpression op, left
+  wrap-soak soak, right,
+  wrap-condition logic, left, if right then t[op] op, left, right
+  else t.unaryExpression op, left
 
 condition =
   \? : -> t.binaryExpression \!= it, t.nullLiteral!
-  \<? : t.binaryExpression.bind void \<
-  \>? : t.binaryExpression.bind void \>
   Call: -> t.binaryExpression \==,
     t.unaryExpression \typeof it
     t.valueToNode \function
 
+t\<? = (, ...args) -> helpers.min args
+t\>? = (, ...args) -> helpers.max args
 t.existence = condition\?
-t.conditional = (logic, target, alt, exist, other) ->
+t\? = (logic, target, other, next, alt) ->
   check = condition[logic] || t.existence
-  t.conditionalExpression (check target, alt), exist || target, other || alt
+  t.conditionalExpression (check target, alt || other),
+    next || target, other || literals.void
 
-t.object-import = (op, target, source) ->
-  assign = t.memberExpression (t.id \Object), t.id \assign
-  t.callExpression assign, [target, source]
+t.object-import = (, ...args) -> helpers.assign args
 
 # Chain
 
@@ -184,8 +185,7 @@ convert-chain = define build: \chain params: chain-params
 chain-types = Index: \memberExpression Call: \callExpression
 t.chain = (type, soak, ...args) ->
   args.push args.1.type != \Identifier if type == \Index
-  main = t[chain-types[type]] ...args
-  if soak then t.conditional type, args.0, literals.void, main else main
+  wrap-soak soak && type, args.0, t[chain-types[type]] ...args
 
 # Block
 
@@ -301,6 +301,15 @@ t <<<
     params: (args, node) -> [t.id node.name || ''] ++ args
 
   If: define build: \ifStatement types: [void statement, statement]
+
+function make-helper name, method
+  fn = t.memberExpression (t.id name), t.id method
+  -> t.callExpression fn, it
+
+helpers =
+  assign: make-helper \Object \assign
+  min: make-helper \Math \min
+  max: make-helper \Math \max
 
 function convert root
   program = t root, TOP

@@ -12,11 +12,14 @@ function main t
 
   * a = 0 c = void
   * a ?= 2 c ?= 2
-  t.deep-equal [a, c] [0 2] 'conditional assignment ?'
+  t.deep-equal [a, c] [0 2] 'conditional assignment ?='
   a = 3
   a <?= 2
   t.equal a, 2 'conditional assignment <?'
 
+  * a = 1 c = 1
+  * a? = 0 c? = void
+  t.deep-equal [a, c] [0 1] 'conditional(soak) assignment ? ='
 
   [c] = [a]
   t.equal c, a, 'destructuring assignment: array'
