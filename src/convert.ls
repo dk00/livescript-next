@@ -108,7 +108,7 @@ transform.Assign = (node, scope) ->
   switch
   | NONE[node.left.value] => node.right
   | node.op == \= => node <<< left: mark-lval node.left
-  | _ => node
+  | _ => node <<< op: node.op - \:
 
 function transform-lval index=0 => (node, scope) ->
   return node unless node.lval
@@ -226,6 +226,24 @@ function make-function [[params, block]]
   * * params, convert-return block
     scope = map-values block.scope, omit-declared
 
+# Switch
+
+function expand-cases => it.map -> t.switchCase it, []
+
+function switch-params [topic, cases, other=literals.void]
+  test = if topic then -> t.binaryExpression \== that, it
+  else pass
+  last = expr other
+  [cases.reduce-right _, last <| (chain, {test: {elements} consequent}) ->
+    t.conditionalExpression do
+      elements.map test .reduce helpers.or
+      if consequent.length > 0 then t.sequenceExpression consequent.map expr
+      else literals.void
+      chain]
+
+function case-params [tests, {body}]
+  * t.arrayExpression tests; body
+
 #Child types
 
 function lval
@@ -249,6 +267,7 @@ expr = derive (node) ->
   | t.isExpression node or t.isSpreadElement node => node
   | node.expression => that
   | t.isFunction node => node <<< type: \FunctionExpression
+  | node.body?length == 1 => expr node.body.0
   | _ => wrap-expression node
 
 literals = <[this arguments eval]>reduce (data, name) ->
@@ -301,6 +320,10 @@ t <<<
     params: (args, node) -> [t.id node.name || ''] ++ args
 
   If: define build: \ifStatement types: [void statement, statement]
+  Switch: define build: \expressionStatement \
+    types: [pass, pass, pass] params: switch-params
+  Case: define build: \switchCase \
+    types: [pass, pass] params: case-params
 
 function make-helper name, method
   fn = t.memberExpression (t.id name), t.id method
@@ -310,6 +333,7 @@ helpers =
   assign: make-helper \Object \assign
   min: make-helper \Math \min
   max: make-helper \Math \max
+  or: (a, b) -> t.logicalExpression \|| a, b
 
 function convert root
   program = t root, TOP

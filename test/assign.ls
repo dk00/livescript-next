@@ -6,6 +6,10 @@ function main t
   a += a
   t.equal a, 2, 'shorthand assignment: add to'
 
+  a = -> a := 1
+  a!
+  t.equal a, 1 'assign to upper scope'
+
   * a = 1 c = 0
   * a ||= 2 c ||= 2
   t.deep-equal [a, c] [1 2] 'conditional assignment ||'
@@ -20,6 +24,10 @@ function main t
   * a = 1 c = 1
   * a? = 0 c? = void
   t.deep-equal [a, c] [0 1] 'conditional(soak) assignment ? ='
+
+  a = 1
+  a? ?<?= 0
+  t.equal a, 1 'hyper soak ? ?<?='
 
   [c] = [a]
   t.equal c, a, 'destructuring assignment: array'
