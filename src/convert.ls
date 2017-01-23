@@ -244,6 +244,13 @@ function switch-params [topic, cases, other=literals.void]
 function case-params [tests, {body}]
   * t.arrayExpression tests; body
 
+# Try
+
+function try-params [block, recovery, finalizer]
+  {body: [, expression: left: param; ...body]}? = recovery
+  handler = t.catchClause param || (t.id \e), t.blockStatement body || []
+  * block, handler, finalizer
+
 #Child types
 
 function lval
@@ -324,6 +331,8 @@ t <<<
     types: [pass, pass, pass] params: switch-params
   Case: define build: \switchCase \
     types: [pass, pass] params: case-params
+  Throw: define build: \throwStatement params: -> [it.0 || t.nullLiteral!]
+  Try: define build: \tryStatement types: [pass, pass, pass] params: try-params
 
 function make-helper name, method
   fn = t.memberExpression (t.id name), t.id method
