@@ -4,7 +4,7 @@ function L
   start: line: it.first_line, column: it.first_column
   end: line: it.last_line, column: it.last_column
 
-* none = [] empty = {} TOP = {} REF = 1 ASSIGN = 2 DECL = 4
+* none = [] empty = {} TOP = \.top : true; REF = 1 ASSIGN = 2 DECL = 4
 function pass => it
 node-type = (.constructor.display-name)
 
@@ -48,7 +48,7 @@ function define {types=none, input=pass, output=pass, params=pass, build}
 => (node, upper) ->
   [nodes, scope] = output _, upper
   <| reduce node.children, _, types
-  <| input upper, node
+  <| {upper\.cascade} <<< input upper, node
   (t[build] ...params nodes, node) <<< {scope}
 
 function expand-pair
@@ -58,16 +58,16 @@ function list
   result = it.properties?map ->; * it.key, list it.value
   result || it
 
-function change-name node, name => node <<< constructor: display-name: name
+function set-type node, name => node <<< constructor: display-name: name
 
 # Module
 
 is-import = (.value == \this)
 function is-module {left} scope
-  (is-import left or left.verb == \out) && scope.__proto__ == TOP
+  (is-import left or left.verb == \out) && scope\.top
 
 transform.Import = (node, scope) ->
-  if is-module node, scope then change-name node, \Module
+  if is-module node, scope then set-type node, \Module
   else node <<< op: \objectImport + (node.all || '')
 
 function pack-export => [;* void it]
@@ -118,7 +118,7 @@ function transform-lval index=0 => (node, scope) ->
 <[Arr Obj Splat Existence]>forEach -> transform[it] = transform-lval!
 transform.Binary = (node, scope) ->
   return unless node.lval
-  next = change-name _, \Assign <| transform-lval! node, scope
+  next = set-type _, \Assign <| transform-lval! node, scope
   next <<< op: \=
 transform.Prop = transform-lval 1
 
@@ -187,6 +187,29 @@ t.chain = (type, soak, ...args) ->
   args.push args.1.type != \Identifier if type == \Index
   wrap-soak soak && type, args.0, t[chain-types[type]] ...args
 
+# Cascade
+
+cascade-key = \.cascade
+function cascade-name scope, inc => "x#{(scope[cascade-key] || 0) + inc}$"
+
+transform.Literal = (node, scope) ->
+  return node if node.value != \..
+  set-type name: (cascade-name scope, 0), children: [], \Var
+
+transform.Cascade = (node, scope) ->
+  set-type node.children.1, \CascadeBlock
+  node
+
+function next-cascade scope, node
+  {} <<< scope <<< (cascade-key): (scope[cascade-key] || 0) + 1
+
+function make-cascade [[input, output] scope]
+  cache = t.id name = cascade-name scope, 1
+  head = statement t.assignment \= cache, input
+  lines = unwrap-blocks output.body
+  lines[*-1]result = cache
+  * [[head, ...lines]] scope <<< (name): DECL
+
 # Block
 
 function declare names
@@ -200,12 +223,13 @@ function close-scope upper, scope
   declarations = declare declared if declared.length > 0
   * declarations, referenced
 
+function unwrap-blocks => it.reduce _, [] <| (body, node) ->
+  body ++= if t.isBlock node then node.body else node
+
 function make-block [[body] scope] upper
   [declarations, referenced] = close-scope upper, scope
-  body = body.reduce (body, node) ->
-    body ++= if t.isBlock node then node.body else node
-  , if declarations then [that] else []
-  * [body] scope = {[k, scope[k]] for k in referenced}
+  head = if declarations then [that] else []
+  * [head ++ unwrap-blocks body] scope = {[k, scope[k]] for k in referenced}
 
 function omit-declared => it if it < DECL
 
@@ -215,6 +239,7 @@ transform.Fun = (node, _) -> node <<< params: node.params.map mark-lval
 
 function convert-return node
   [..., last] = node.body
+  node.body.push last = that if last?result
   if last && !t.isReturnStatement last
     node.body[*-1] = t.returnStatement expr last
   node
@@ -326,6 +351,10 @@ t <<<
     output: make-function
     params: (args, node) -> [t.id node.name || ''] ++ args
 
+  Cascade: define build: \blockStatement \
+    types: [, pass] output: make-cascade
+  CascadeBlock: define build: \blockStatement \
+    types: [statement] input: next-cascade
   If: define build: \ifStatement types: [void statement, statement]
   Switch: define build: \expressionStatement \
     types: [pass, pass, pass] params: switch-params
