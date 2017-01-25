@@ -9,6 +9,10 @@ function main t
   a = -> if true then true else 0
   t.ok a!, 'return from if expression'
 
+  expected = {}
+  actual = that if expected
+  t.equal actual, expected, 'cache test result to implicit that'
+
   t.end!
 
 export default: main

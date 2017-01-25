@@ -19,6 +19,16 @@ function main t
     | 1, 2 => expected
   t.equal actual, expected, 'switch with mutiple case values'
 
+  actual = switch
+    | expected => that
+    | _ => []
+  t.equal actual, expected, 'cache test result to implicit that'
+
+  actual = switch expected
+    | expected => that
+    | _ => []
+  t.equal actual, expected, 'cache switch value to implicit that'
+
   t.end!
 
 export default: main

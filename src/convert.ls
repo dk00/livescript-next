@@ -220,6 +220,7 @@ function close-scope upper, scope
   Object.keys scope
     declared = ..filter to-declare
     referenced = ..filter -> !to-declare it
+    .reduce _, {} <| (result, key) -> result <<< (key): scope[key]
   declarations = declare declared if declared.length > 0
   * declarations, referenced
 
@@ -229,7 +230,7 @@ function unwrap-blocks => it.reduce _, [] <| (body, node) ->
 function make-block [[body] scope] upper
   [declarations, referenced] = close-scope upper, scope
   head = if declarations then [that] else []
-  * [head ++ unwrap-blocks body] scope = {[k, scope[k]] for k in referenced}
+  * [head ++ unwrap-blocks body] referenced
 
 function omit-declared => it if it < DECL
 
@@ -245,29 +246,49 @@ function convert-return node
   node
 
 function make-function [[params, block]]
-  if params.length == 0 && block.scope.it
+  if params.length == 0 && (block.scope.it.&.(REF.|.ASSIGN))
     params = [t.id \it]
     block.scope.it = DECL
   * * params, convert-return block
     scope = map-values block.scope, omit-declared
 
+# If
+
+function cache-that test, scope
+  if scope.that.&.(REF.|.ASSIGN)
+    * t.assignment \= (t.id \that), test; scope <<< that: DECL
+  else [test, scope]
+
+function make-if [[test, consequent, alternate] scope]
+  [test, scope] = cache-that test, scope
+  * [test, consequent, alternate] scope
+
 # Switch
+
+function wrap-sequence
+  if it.length > 0 then t.sequenceExpression it.map expr
+  else literals.void
 
 function expand-cases => it.map -> t.switchCase it, []
 
 function switch-params [topic, cases, other=literals.void]
-  test = if topic then -> t.binaryExpression \== that, it
-  else pass
+  test = if topic then (value, index) ->
+    target = if index then (t.id \that) else cache-that topic, that: REF .0
+    t.binaryExpression \== target, value
+  else (value,, scope) -> cache-that value, scope .0
   last = expr other
-  [cases.reduce-right _, last <| (chain, {test: {elements} consequent}) ->
+  [cases.reduce-right _, last <| (chain, node, index) ->
     t.conditionalExpression do
-      elements.map test .reduce helpers.or
-      if consequent.length > 0 then t.sequenceExpression consequent.map expr
-      else literals.void
+      node.test.elements.map (value, sub) ->
+        test value, sub+index, node.consequent[*-1]?scope || empty
+      .reduce helpers.or
+      wrap-sequence node.consequent
       chain]
 
 function case-params [tests, {body}]
   * t.arrayExpression tests; body
+
+function make-switch [args, scope] => [args, scope <<< that: DECL]
 
 # Try
 
@@ -347,7 +368,7 @@ t <<<
   Return: define build: \returnStatement
   Fun: define do
     build: \functionExpression types: [lval, statement]
-    input: (, node) -> if node.params.length == 0 then it: DECL else {}
+    input: (, node) -> {}
     output: make-function
     params: (args, node) -> [t.id node.name || ''] ++ args
 
@@ -355,9 +376,10 @@ t <<<
     types: [, pass] output: make-cascade
   CascadeBlock: define build: \blockStatement \
     types: [statement] input: next-cascade
-  If: define build: \ifStatement types: [void statement, statement]
+  If: define build: \ifStatement types: [void statement, statement] \
+    output: make-if
   Switch: define build: \expressionStatement \
-    types: [pass, pass, pass] params: switch-params
+    types: [pass, pass, pass] params: switch-params, output: make-switch
   Case: define build: \switchCase \
     types: [pass, pass] params: case-params
   Throw: define build: \throwStatement params: -> [it.0 || t.nullLiteral!]
