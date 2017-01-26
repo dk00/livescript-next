@@ -10,6 +10,9 @@ function main t
   t.ok t?, 'existance ?'
   t.deep-equal [1 <? 2 1 >? 2] [1 2] 'binary expression <? >?'
 
+  actual = [1] ++ ([1] ++ 1)
+  t.deep-equal actual, [1 1 1] 'concat arrays ++'
+
   result = {a: 1} <<< (b: 2)
   expecetd = a: 1 b: 2
   t.deep-equal result, expecetd, 'copy object properties'

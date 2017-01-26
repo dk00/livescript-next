@@ -19,15 +19,17 @@ function t original, scope
   convert-node node, scope
     ..loc = L original
 t <<< types
+t.id = -> t.identifier it
 # work around babel/babel#4741
 t.objectProperty = (key, value, computed, shorthand) ->
   {type: \ObjectProperty key, value, computed, shorthand}
 
+function last => it[it.length-1]
+function list-apply whatever, fn => whatever.map? fn or fn whatever
+
 function merge scope, nested={}
   Object.keys nested .forEach (key) -> scope[key] .|.= nested[key]
   scope
-
-function list-apply whatever, fn => whatever.map? fn or fn whatever
 
 function convert-arg arg, scope, convert-type
   []concat arg .reduce ([nodes, scope] arg) ->
@@ -135,6 +137,10 @@ t.assignment = (op, left, right) ->
 t\<?= = t\>?= = (op, left, right) ->
   t.assignment \= left, t[op.slice 0 2] void left, right
 
+t\++= = (, left, right) ->
+  assign = t.callExpression (member [left, \push]), [t.spreadElement right]
+  t.sequenceExpression [assign, left]
+
 # Infix
 
 transform.Parens = (node, scope) -> node.it
@@ -164,15 +170,16 @@ condition =
     t.unaryExpression \typeof it
     t.valueToNode \function
 
-t\<? = (, ...args) -> helpers.min args
-t\>? = (, ...args) -> helpers.max args
+t\<? = make-helper <[Math min]>
+t\>? = make-helper <[Math max]>
 t.existence = condition\?
 t\? = (logic, target, other, next, alt) ->
   check = condition[logic] || t.existence
   t.conditionalExpression (check target, alt || other),
     next || target, other || literals.void
 
-t.object-import = (, ...args) -> helpers.assign args
+t\++ = make-helper [t.valueToNode []; \concat]
+t.object-import = make-helper [\Object \assign] false
 
 # Chain
 
@@ -207,7 +214,7 @@ function make-cascade [[input, output] scope]
   cache = t.id name = cascade-name scope, 1
   head = statement t.assignment \= cache, input
   lines = unwrap-blocks output.body
-  lines[*-1]result = cache
+  last lines .result = cache
   * [[head, ...lines]] scope <<< (name): DECL
 
 # Block
@@ -239,17 +246,20 @@ function omit-declared => it if it < DECL
 transform.Fun = (node, _) -> node <<< params: node.params.map mark-lval
 
 function convert-return node
-  [..., last] = node.body
-  node.body.push last = that if last?result
-  if last && !t.isReturnStatement last
-    node.body[*-1] = t.returnStatement expr last
+  end = last node.body
+  node.body.push end = that if end?result
+  if end && !t.isReturnStatement end
+    node.body = node.body.slice 0 -1 .concat t.returnStatement expr end
   node
+
+function fill-omitted => it.map (name, index) ->
+  if name.type == \UnaryPattern then t.id "arg#{index}$" else name
 
 function make-function [[params, block]]
   if params.length == 0 && (block.scope.it.&.(REF.|.ASSIGN))
     params = [t.id \it]
     block.scope.it = DECL
-  * * params, convert-return block
+  * * (fill-omitted params), convert-return block
     scope = map-values block.scope, omit-declared
 
 # If
@@ -276,11 +286,10 @@ function switch-params [topic, cases, other=literals.void]
     target = if index then (t.id \that) else cache-that topic, that: REF .0
     t.binaryExpression \== target, value
   else (value,, scope) -> cache-that value, scope .0
-  last = expr other
-  [cases.reduce-right _, last <| (chain, node, index) ->
+  [cases.reduce-right _, (expr other) <| (chain, node, index) ->
     t.conditionalExpression do
       node.test.elements.map (value, sub) ->
-        test value, sub+index, node.consequent[*-1]?scope || empty
+        test value, sub+index, (last node.consequent ?.scope) || empty
       .reduce helpers.or
       wrap-sequence node.consequent
       chain]
@@ -301,12 +310,12 @@ function try-params [block, recovery, finalizer]
 
 function lval
   return it if t.isLVal it
-  it <<< type:
+  {} <<< it <<< type:
     | t.isSpreadElement it => \RestElement
     | _ => it.type.replace \Expression \Pattern
 
 function derive adapt => (node) ->
-  (adapt node) <<< node{loc}
+  (adapt node) <<< {node.loc}
     ..scope = merge node.scope, ..scope
 
 statement = derive ->
@@ -344,7 +353,6 @@ function property-params [key, value]
     shorthand = key == value
 
 t <<<
-  id: -> t.identifier it
   unk: -> throw "Unimplemented node type: #{node-type it}"
 
   Literal: -> literals[it.value] or t.valueToNode eval it.value
@@ -385,14 +393,20 @@ t <<<
   Throw: define build: \throwStatement params: -> [it.0 || t.nullLiteral!]
   Try: define build: \tryStatement types: [pass, pass, pass] params: try-params
 
-function make-helper name, method
-  fn = t.memberExpression (t.id name), t.id method
-  -> t.callExpression fn, it
+function member
+  it.0 = if \object == typeof it.0 then it.0 else t.id it.0
+  it.reduce (a, b) -> t.memberExpression a, t.id b
+
+function make-helper names, associative=true
+  fn = member names
+  (, ...args) ->
+    | args.0.callee == fn
+      {} <<< args.0 <<< arguments: args.0.arguments ++ args.1
+    | args.1.callee == fn && associative
+      {} <<< args.1 <<< arguments: [args.0, ...args.1.arguments]
+    | _ => t.callExpression fn, args
 
 helpers =
-  assign: make-helper \Object \assign
-  min: make-helper \Math \min
-  max: make-helper \Math \max
   or: (a, b) -> t.logicalExpression \|| a, b
 
 function convert root

@@ -10,6 +10,11 @@ function main t
   a!
   t.equal a, 1 'assign to upper scope'
 
+  a = [1]
+  c = [1]
+  actual = [a ++= c ++= a; c]
+  t.deep-equal actual, [[1 1 1] [1 1]] 'push array ++='
+
   * a = 1 c = 0
   * a ||= 2 c ||= 2
   t.deep-equal [a, c] [1 2] 'conditional assignment ||'
