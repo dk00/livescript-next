@@ -72,11 +72,17 @@ transform.Import = (node, scope) ->
   if is-module node, scope then set-type node, \Module
   else node <<< op: \objectImport + (node.all || '')
 
-function pack-export => [;* void it]
+function pack-export
+  base = it.filter -> it.0.type == \Identifier
+  it.filter -> it.0.type != \Identifier
+  .map ([from, name]) -> [from, [[name, t.id \default]]]
+  .concat if base.length > 0 then [[void base]] else []
+
 function pack-import => it.map ([source, name]) -> ;* source, [[name]]
 function specify-import alias, name
-  if alias then t.importSpecifier alias, name
-  else t.importDefaultSpecifier name
+  type = if \Identifier == name.type then \Default else \Namespace
+  if alias && type != \Namespace then t.importSpecifier alias, name
+  else t"import#{type}Specifier" alias || name
 
 function module-declare extended, base, declare, specify, pack
   extended.concat if base.length > 0 then pack base else []
@@ -335,6 +341,7 @@ expr = derive (node) ->
 literals = <[this arguments eval]>reduce (data, name) ->
   data <<< (name): t.identifier name
 , void: t.unaryExpression \void t.valueToNode 8
+literals\* = literals.void
 
 string-literal = derive ->
   | it.type == \StringLiteral => it
