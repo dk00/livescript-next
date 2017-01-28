@@ -7,6 +7,13 @@ function main t
   b = 2
   t.deep-equal [a ? 1 b ? 1] [1 2] 'binary expression ?'
 
+  comment = 'use cache in conditional expression'
+  expected = {}
+  get = ->
+    get := -> t.fail comment
+    expected
+  t.equal get! ? 0 expected, comment
+
   t.ok t?, 'existance ?'
   t.deep-equal [1 <? 2 1 >? 2] [1 2] 'binary expression <? >?'
 

@@ -8,8 +8,12 @@ function L
 function pass => it
 node-type = (.constructor.display-name)
 
+function h display-name, props
+  children = Object.keys props .filter -> it != \op
+  {constructor: {display-name} children} <<< props
+
 function transform node, scope
-  node.children .= map (node.)
+  node.children .= map (node.) if \string == typeof node.children.0
   next = transform[node-type node]? node, scope
   if next && next != node then transform next else node
 
@@ -108,15 +112,16 @@ function map-values object, value
 
 function mark-lval => if it.value != \void then it <<< lval: true else null
 
+function set-lval
+  it.children = [mark-lval it.children.0; it.children.1] if it.op == \=
+  it
+
+function strip-assign => it <<< op: it.op.replace \: ''
+
 NONE = {+void, +null}
 transform.Assign = (node, scope) ->
-  if \Existence == node-type node.children.0
-    node.children.0 .= it
-    node.soak = \?
-  switch
   | NONE[node.left.value] => node.right
-  | node.op == \= => node <<< left: mark-lval node.left
-  | _ => node <<< op: node.op - \:
+  | _ => transform-conditional strip-assign set-lval node
 
 function transform-lval index=0 => (node, scope) ->
   return node unless node.lval
@@ -124,8 +129,8 @@ function transform-lval index=0 => (node, scope) ->
   node
 
 <[Arr Obj Splat Existence]>forEach -> transform[it] = transform-lval!
-transform.Binary = (node, scope) ->
-  return unless node.lval
+function transform-default node, scope
+  return node unless node.lval
   next = set-type _, \Assign <| transform-lval! node, scope
   next <<< op: \=
 transform.Prop = transform-lval 1
@@ -147,9 +152,65 @@ t\++= = (, left, right) ->
   assign = t.callExpression (member [left, \push]), [t.spreadElement right]
   t.sequenceExpression [assign, left]
 
+# Existence
+
+nodes =
+  that: h \Var value: \that
+  null: h \Literal value: null
+function binary-node op, left, right
+  type = if op == \= then \Assign else \Binary
+  h type, {op, left, right}
+
+function not-null => binary-node \!= it, nodes.null
+function is-function
+  binary-node \==,
+    h \Unary op: \typeof it: it
+    h \Literal value: \'function'
+
+function cache-name => if \Var == node-type it then it else nodes.that
+function cache-test
+  name = cache-name it
+  if name == it then it else binary-node \= name, it
+
+function cache-index
+  node = transform it
+  [origin, key] = node.children
+  return [node, node] unless origin && \Index == node-type origin
+  name = h \Var value: \ref$
+  * node <<< children: [binary-node \= name, origin; key]
+    h \Index {base: name, key}
+
+transform.Existence = (node, scope) -> not-null node.it
+function exist name, type
+  check = if type == \Call then is-function else not-null
+  check cache-test name
+
+function conditional test, next, other
+  h \Conditional,
+    test: exist test, node-type next
+    then: next, else: other || h \Literal value: \void
+
+function logical op, left,, right => h \Binary {op, left, right}
+
+function transform-conditional
+  [left, right] = it.children
+  fold = if t[it.logic] then logical.bind void it.logic else conditional
+  items =
+    | \Existence == node-type it.children.0
+      * right, it <<< children: [left.it, cache-name right]
+    | it.op == \? => * left, cache-name left; right
+    | it.soak => * left, it <<< soak: void children: [cache-name left; right]
+    | it.logic
+      [target, name] = cache-index left
+      * target, name, it <<< logic: void children: [name, right]
+
+  if items then fold ...that else it
+
 # Infix
 
 transform.Parens = (node, scope) -> node.it
+transform.Binary = (node, scope) ->
+  transform-conditional transform-default node, scope
 
 convert-infix = define build: \infixExpression params: infix-params
 function infix-params args, node => [node.op] ++ args ++ node<[logic soak]>
@@ -158,32 +219,13 @@ t.BINARY_OPERATORS.forEach -> t[it] = t.binaryExpression
 t.LOGICAL_OPERATORS.forEach -> t[it] = t.logicalExpression
 t.NUMBER_BINARY_OPERATORS.concat ['' \+] .forEach -> t"#it=" = t.assignment
 
-function wrap-condition logic, target, result
-  t[logic]? logic, target, result or result
-
-function wrap-soak type, target, result
-  if type then t\? type, target,, result else result
-
 t.infix-expression = (op, left, right, logic, soak) ->
   op .= replace /\.(.)\./ \$1
-  wrap-soak soak, right,
-  wrap-condition logic, left, if right then t[op] op, left, right
+  if right then t[op] op, left, right
   else t.unaryExpression op, left
-
-condition =
-  \? : -> t.binaryExpression \!= it, t.nullLiteral!
-  Call: -> t.binaryExpression \==,
-    t.unaryExpression \typeof it
-    t.valueToNode \function
 
 t\<? = make-helper <[Math min]>
 t\>? = make-helper <[Math max]>
-t.existence = condition\?
-t\? = (logic, target, other, next, alt) ->
-  check = condition[logic] || t.existence
-  t.conditionalExpression (check target, alt || other),
-    next || target, other || literals.void
-
 t\++ = make-helper [t.valueToNode []; \concat]
 t.object-import = make-helper [\Object \assign] false
 
@@ -193,12 +235,8 @@ transform.Chain = ({head, tails}) ->
   tails.reduce _, head <| (tree, node) ->
     node <<< base: tree, children: [\base] ++ node.children
 
-function chain-params args, node => [node-type node; node.soak] ++ args
-convert-chain = define build: \chain params: chain-params
-chain-types = Index: \memberExpression Call: \callExpression
-t.chain = (type, soak, ...args) ->
-  args.push args.1.type != \Identifier if type == \Index
-  wrap-soak soak && type, args.0, t[chain-types[type]] ...args
+transform.Index = transform.Call = (node, scope) -> transform-conditional node
+function member-params [base, key] => [base, key, key.type != \Identifier]
 
 # Cascade
 
@@ -324,8 +362,9 @@ function derive adapt => (node) ->
   (adapt node) <<< {node.loc}
     ..scope = merge node.scope, ..scope
 
+function anonymous => t.isFunction it and !it.id.name
 statement = derive ->
-  | t.toStatement it, true => that
+  | !anonymous it and t.toStatement it, true => that
   | t.isExpression it => t.expressionStatement it
   | _ => it
 
@@ -370,9 +409,10 @@ t <<<
   Prop: define build: \objectProperty params: property-params
 
   Module: module-io
-  Index: convert-chain, Call: convert-chain
+  Index: define build: \memberExpression params: member-params
+  Call: define build: \callExpression
   Unary: convert-infix, Binary: convert-infix, Assign: convert-infix
-  Import: convert-infix, Existence: define build: \existence
+  Import: convert-infix
   Splat: define build: \spreadElement
 
   Block: define do
@@ -391,6 +431,7 @@ t <<<
     types: [, pass] output: make-cascade
   CascadeBlock: define build: \blockStatement \
     types: [statement] input: next-cascade
+  Conditional: define build: \conditionalExpression
   If: define build: \ifStatement types: [void statement, statement] \
     output: make-if
   Switch: define build: \expressionStatement \
