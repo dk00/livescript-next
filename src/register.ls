@@ -1,6 +1,10 @@
-require! fs: {readFileSync} livescript, \babel-core : babel
+{readFileSync} = require \fs
+livescript = require \livescript
+babel = require \babel-core
+
 delete require.extensions\.ls
-require \babel-register <| extensions: <[.ls .jsx .js]>
+require \babel-register <|
+extensions: <[.ls .jsx .js]> plugins: [\transform-es2015-modules-commonjs]
 
 transformFileSync = void
 function loader compile => (filename, options) ->

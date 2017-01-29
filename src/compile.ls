@@ -1,7 +1,9 @@
-``
-import * as Babel from 'babel-core'
-import parse from './parse'``
+import
+  \babel-core : *: Babel
+  \./parse : parse
 
-function compile code => Babel.transform code, parser-opts: parser: parse
+function compile code, options={}
+  config = {+source-maps, filename: \t.ls parser-opts: parser: parse}
+  Babel.transform code, config <<< options
 
-``export default compile``
+export default: compile

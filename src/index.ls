@@ -1,4 +1,4 @@
-``
-export {default as parse} from './parse'
-export {default as compile} from './compile'
-export {default as convert} from './convert'``
+export
+  \./convert : convert
+  \./parse : parse
+  \./compile : compile

@@ -1,4 +1,4 @@
-``import * as types from 'babel-types'``
+import \babel-types : *: types
 
 function L
   start: line: it.first_line, column: it.first_column
@@ -493,4 +493,4 @@ function convert root
   t.file program, [] []
     ..loc = program.loc
 
-``export default convert``
+export default: convert

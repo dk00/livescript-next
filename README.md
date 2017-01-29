@@ -9,7 +9,37 @@ This project works as a bridge from LiveScript to modern javascirpt, by converti
 
 ls code -> LiveScript parser -> **convert** -> babel transform -> js
 
+ES modules can be used without js code literals, use `import` and `export` instead, just like using `require!`.
+
+```ls
+import name, name1: alias
+import module: {name0, name1: alias1}
+export {name, default: name, alias: name}
+```
+
+```js
+import name from "name";
+import alias from "name1";
+import { name0, name1 as alias1 } from "module";
+export { name, name as default, name as alias };
+```
+
 See [wiki](/dk00/livescript-next/wiki) for what are added and what are going to be added.
+
+## Usage
+
+The `parse` function can be used by `babel` to parse `.ls` files, add this to babel options to enable it. Also add `stage-0` presets to handle stage 0 ES features.
+
+``ls
+presets: <[stage-0]>
+parser-opts: parser: require \livescript-next .parse
+``
+
+When using in node with `babel-register`, add commonjs transform plugin
+
+``ls
+plugins: <[transform-es2015-modules-commonjs]>
+``
 
 ## Features
 
@@ -19,18 +49,22 @@ See [wiki](/dk00/livescript-next/wiki) for what are added and what are going to 
   - [ ] Import only side-effect
 - Destructing assignment/parameter
   - [x] Basic support
-  - [ ] With default value
-  - [ ] Spread operator
-- [ ] External helper
-- [ ] Block scope(optional)
+  - [x] With default value
+  - [x] Spread operator
+  - [ ] With label
+- [x] External helper
+- [x] Block scope(optional)
 - [ ] Async function
 - [ ] Arrow function
 - [ ] Class
 
 ## API
 
-- `convert ast, options`: `ast`
-- `compile code, options`: `{code, map}`
+- `convert :: ast -> ast`
+  Convert from LiveScript AST to babel AST
+- `parse :: code -> ast`
+  Parse LiveScript code and convert it to babel AST
+- `compile :: code -> {code, map}`
 
 ## Require hook for node
 
@@ -40,9 +74,7 @@ ES module `import`/`export` is not supported by LiveScript (yet), but we can sti
 
 index.js
 ```js
-require('../lib/register')
-//or once the package is published, use require('livescript-next/register')
-
+require('livescript-next/register')
 require('./start')
 ```
 
@@ -69,8 +101,8 @@ export default () => console.log('hello js')
 ```
 
 ```
-yarn
-node examples/index
+npm i livescript livescript-next babel-register babel-core
+node index
 ```
 
 ```
