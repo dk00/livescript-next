@@ -17,6 +17,8 @@ function main t
   t.ok t?, 'existance ?'
   t.deep-equal [1 <? 2 1 >? 2] [1 2] 'binary expression <? >?'
 
+  t.equal 4 <? (1 <? 3) <? 2 1 'unfold chained comparison'
+
   actual = [1] ++ ([1] ++ 1)
   t.deep-equal actual, [1 1 1] 'concat arrays ++'
 

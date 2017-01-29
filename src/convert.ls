@@ -116,12 +116,12 @@ function set-lval
   it.children = [mark-lval it.children.0; it.children.1] if it.op == \=
   it
 
-function strip-assign => it <<< op: it.op.replace \: ''
+function strip-assign => it <<< op: it.op?replace \: ''
 
 NONE = {+void, +null}
 transform.Assign = (node, scope) ->
   | NONE[node.left.value] => node.right
-  | _ => transform-conditional strip-assign set-lval node
+  | _ => strip-assign set-lval transform-unfold node
 
 function transform-lval index=0 => (node, scope) ->
   return node unless node.lval
@@ -137,7 +137,7 @@ transform.Prop = transform-lval 1
 
 function convert-variable
   name = it.value || it.name
-  variable = t.id name
+  variable = (t.id name) <<< key: \Key == node-type it
   type = if it.lval then DECL else if it.value then REF
   if type then variable <<< scope: (name): type
   else variable
@@ -152,11 +152,10 @@ t\++= = (, left, right) ->
   assign = t.callExpression (member [left, \push]), [t.spreadElement right]
   t.sequenceExpression [assign, left]
 
-# Existence
+# Unfold
 
-nodes =
-  that: h \Var value: \that
-  null: h \Literal value: null
+t.sequence = -> t.sequenceExpression it
+nodes = null: h \Literal value: null
 function binary-node op, left, right
   type = if op == \= then \Assign else \Binary
   h type, {op, left, right}
@@ -167,50 +166,67 @@ function is-function
     h \Unary op: \typeof it: it
     h \Literal value: \'function'
 
-function cache-name => if \Var == node-type it then it else nodes.that
-function cache-test
-  name = cache-name it
-  if name == it then it else binary-node \= name, it
+no-cache = {+Var, +Key}
+function temporary => h \Var value: it
+function cache-ref node, id=\that
+  * name = if no-cache[node-type node] then node else temporary id
+    if name == node then node else binary-node \= name, node
+
+function merge-assignment
+  return it if it.some -> \Assign != node-type it
+  binary-node \= ...<[left right]>map (key) -> h \Arr items: it.map (.(key))
 
 function cache-index
   node = transform it
-  [origin, key] = node.children
-  return [node, node] unless origin && \Index == node-type origin
-  name = h \Var value: \ref$
-  * node <<< children: [binary-node \= name, origin; key]
-    h \Index {base: name, key}
+  return cache-ref node if \Index != node-type node
+  cache = <[ref$ key$]>map (id, index) -> cache-ref node.children[index], id
+  [[base] [key]] = cache
+  assign-cache = merge-assignment cache.map (.1)
+  * h \Index {base, key}
+    if \Assign == node-type assign-cache
+      h \Sequence lines: [assign-cache, node <<< children: [base, key]]
+    else node <<< children: assign-cache
 
 transform.Existence = (node, scope) -> not-null node.it
 function exist name, type
   check = if type == \Call then is-function else not-null
-  check cache-test name
+  check name
 
 function conditional test, next, other
   h \Conditional,
-    test: exist test, node-type next
+    test: exist test, next.tails?0 && node-type next.tails.0
     then: next, else: other || h \Literal value: \void
 
 function logical op, left,, right => h \Binary {op, left, right}
 
-function transform-conditional
-  [left, right] = it.children
-  fold = if t[it.logic] then logical.bind void it.logic else conditional
-  items =
-    | \Existence == node-type it.children.0
-      * right, it <<< children: [left.it, cache-name right]
-    | it.op == \? => * left, cache-name left; right
-    | it.soak => * left, it <<< soak: void children: [cache-name left; right]
-    | it.logic
-      [target, name] = cache-index left
-      * target, name, it <<< logic: void children: [name, right]
+should-bind = (.logic || it.tails)
+take-left = (.children.0)
+take-right = (.children.1)
+function strip-logic => it <<< logic: void
+function unwrap-left => it <<< children: [it.children.0.it, it.children.1]
+function strip-soak => it.tails.0.soak = void; it
+function strip-symbol => it.tails.0.symbol = \.; it
 
-  if items then fold ...that else it
+function transform-unfold
+  items = it.children
+  tail = items.1.0 || {}
+  settings =
+    | \Existence == node-type items.0 => * unwrap-left,,, 1
+    | it.op == \? => * take-left,, take-right
+    | it.logic => * take-left, t[that] && logical.bind void that; strip-logic
+    | tail.soak => [strip-soak]
+    | tail.symbol == \.= => * strip-symbol, binary-node.bind void \=
+  return it unless [select, unfold=conditional, alt, replace=0]? = settings
+
+  assign-cache = if should-bind it then cache-index else cache-ref
+  [items[replace], target] = assign-cache items[replace]
+  unfold target, (select it), alt? it
 
 # Infix
 
 transform.Parens = (node, scope) -> node.it
 transform.Binary = (node, scope) ->
-  transform-conditional transform-default node, scope
+  transform-unfold transform-default node, scope
 
 convert-infix = define build: \infixExpression params: infix-params
 function infix-params args, node => [node.op] ++ args ++ node<[logic soak]>
@@ -231,12 +247,26 @@ t.object-import = make-helper [\Object \assign] false
 
 # Chain
 
-transform.Chain = ({head, tails}) ->
-  tails.reduce _, head <| (tree, node) ->
+function split-chain chain, pivot
+  tails = chain.tails.slice pivot
+  head = transform chain <<< tails: chain.tails.slice 0 pivot
+  (h \Chain {head, tails}) <<< children: [head, tails]
+
+function unfold-chain
+  pivot = 1 + it.tails.find-index (.soak)
+  or 1 + it.tails.find-index (.symbol == \.= )
+  return if pivot < 1
+  chain = if pivot > 1 then split-chain it, pivot-1 else it
+  result = transform-unfold chain
+  chain.head = chain.children.0
+  result
+
+transform.Chain = ->
+  return that if unfold-chain it
+  it.tails.reduce _, it.head <| (tree, node) ->
     node <<< base: tree, children: [\base] ++ node.children
 
-transform.Index = transform.Call = (node, scope) -> transform-conditional node
-function member-params [base, key] => [base, key, key.type != \Identifier]
+function member-params [base, key] => * base, key, !key.key
 
 # Cascade
 
@@ -276,7 +306,7 @@ function close-scope upper, scope
   * declarations, referenced
 
 function unwrap-blocks => it.reduce _, [] <| (body, node) ->
-  body ++= if t.isBlock node then node.body else node
+  body ++= if t.isBlock node then node.body else [node]
 
 function make-block [[body] scope] upper
   [declarations, referenced] = close-scope upper, scope
@@ -301,7 +331,7 @@ function fill-omitted => it.map (name, index) ->
 
 function make-function [[params, block]]
   if params.length == 0 && (block.scope.it.&.(REF.|.ASSIGN))
-    params = [t.id \it]
+    params := [t.id \it]
     block.scope.it = DECL
   * * (fill-omitted params), convert-return block
     scope = map-values block.scope, omit-declared
@@ -317,8 +347,12 @@ function make-if [[test, consequent, alternate] scope]
   [test, scope] = cache-that test, scope
   * [test, consequent, alternate] scope
 
-# Switch
+function if-params args, node
+  args.0 = t.unaryExpression \! args.0 if node.un
+  args
 
+# Switch
+# XXX wrapped even if there's only 1 to ensure the output compiles
 function wrap-sequence
   if it.length > 0 then t.sequenceExpression it.map expr
   else literals.void
@@ -338,10 +372,8 @@ function switch-params [topic, cases, other=literals.void]
       wrap-sequence node.consequent
       chain]
 
-function case-params [tests, {body}]
-  * t.arrayExpression tests; body
-
-function make-switch [args, scope] => [args, scope <<< that: DECL]
+function case-params [tests, {body}] => * t.arrayExpression tests; body
+function make-switch [args, scope] => * args, scope <<< that: DECL
 
 # Try
 
@@ -353,20 +385,19 @@ function try-params [block, recovery, finalizer]
 #Child types
 
 function lval
-  return it if t.isLVal it
-  {} <<< it <<< type:
-    | t.isSpreadElement it => \RestElement
-    | _ => it.type.replace \Expression \Pattern
+  return it if !it || t.isLVal it
+  it.elements ?.= map lval
+  it.properties ?.= map ->
+    it <<< value: (lval it.value), type: it.type.replace \Spread \Rest
+  {} <<< it <<< type: it.type
+  .replace \Expression \Pattern .replace \Spread \Rest
 
-function derive adapt => (node) ->
-  (adapt node) <<< {node.loc}
-    ..scope = merge node.scope, ..scope
+function derive rewrite => -> (rewrite it) <<< {it.loc, it.scope}
 
 function anonymous => t.isFunction it and !it.id.name
 statement = derive ->
   | !anonymous it and t.toStatement it, true => that
   | t.isExpression it => t.expressionStatement it
-  | _ => it
 
 function wrap-expression node => t.doExpression t.blockStatement [node]
 
@@ -389,14 +420,12 @@ string-literal = derive ->
 property = derive ->
   | it.type == \ObjectProperty => it
   | t.isSpreadElement it => it <<< type: \SpreadProperty
-  | it.type == \AssignmentExpression =>
+  | it.type == \AssignmentExpression
     t.objectProperty it.left, it <<< type: \AssignmentPattern, false true
   | _ => t.objectProperty ...property-params [it, it]
 
 function property-params [key, value]
-  * key, value
-    computed = key.type != \Identifier && key.type != \Literal
-    shorthand = key == value
+  * key, value, computed = !key.key, shorthand = key == value
 
 t <<<
   unk: -> throw "Unimplemented node type: #{node-type it}"
@@ -419,6 +448,7 @@ t <<<
     build: \blockStatement types: [statement] input: ->
       if it == TOP then it else {}
     output: make-block
+  Sequence: define build: \sequence
 
   Return: define build: \returnStatement
   Fun: define do
@@ -433,7 +463,7 @@ t <<<
     types: [statement] input: next-cascade
   Conditional: define build: \conditionalExpression
   If: define build: \ifStatement types: [void statement, statement] \
-    output: make-if
+    output: make-if, params: if-params
   Switch: define build: \expressionStatement \
     types: [pass, pass, pass] params: switch-params, output: make-switch
   Case: define build: \switchCase \

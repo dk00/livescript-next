@@ -26,6 +26,21 @@ function main t
   expected = t: o
   t.deep-equal actual, expected, 'assign to cached properties'
 
+  expected = {}
+  actual = {expected}
+  actual .= expected
+  t.equal actual, expected, 'access + assign property'
+
+  message = 'cache property key'
+  object = one-time-getter (key: -> expected), message
+  key = one-time-getter \key message
+  actual = object![key!]?!
+  t.deep-equal actual, expected, message
+
+  a = b: c: d: true
+  actual = [a.b?c.d, a.x?y.z]
+  t.deep-equal actual, [true void] 'unfold chain after first position'
+
   t.ok
     .. .., 'cascade: 1 level'
 
