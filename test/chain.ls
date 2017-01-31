@@ -37,6 +37,15 @@ function main t
   actual = object![key!]?!
   t.deep-equal actual, expected, message
 
+  message = 'cache nested property access'
+  items =
+    * a: -> expected
+    * b: -> \a
+    * \b
+  [a, b, c] = items.map -> one-time-getter it, message
+  actual = a![b![c!]?!]?!
+  t.equal actual, expected, message
+
   a = b: c: d: true
   actual = [a.b?c.d, a.x?y.z]
   t.deep-equal actual, [true void] 'unfold chain after first position'

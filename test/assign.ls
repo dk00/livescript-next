@@ -22,6 +22,14 @@ function main t
   * a = 0 c = void
   * a ?= 2 c ?= 2
   t.deep-equal [a, c] [0 2] 'conditional assignment ?='
+
+  * a = 0 c = void
+  q = ->
+    a ?:= 1
+    c ?:= 1
+  q!
+  t.deep-equal [a, c] [0 1] 'conditional assignment to upper scope ?:='
+
   a = 3
   a <?= 2
   t.equal a, 2 'conditional assignment <?'

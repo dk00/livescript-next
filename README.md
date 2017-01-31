@@ -28,18 +28,18 @@ See [wiki](/dk00/livescript-next/wiki) for what are added and what are going to 
 
 ## Usage
 
-The `parse` function can be used by `babel` to parse `.ls` files, add this to babel options to enable it. Also add `stage-0` presets to handle stage 0 ES features.
+The `parse` function can be used by `babel` to parse `.ls` files, add this to babel options to enable it. Also add `stage-0` presets to handle [stage 0](/tc39/proposals/blob/master/stage-0-proposals.md) and [above](/tc39/proposals) ES features.
 
-``ls
+```ls
 presets: <[stage-0]>
 parser-opts: parser: require \livescript-next .parse
-``
+```
 
 When using in node with `babel-register`, add commonjs transform plugin
 
-``ls
+```ls
 plugins: <[transform-es2015-modules-commonjs]>
-``
+```
 
 ## Features
 

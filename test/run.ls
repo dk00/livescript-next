@@ -1,10 +1,23 @@
-require! \babel-register : register, \../lib/parse : default: parse
+require! tape: test, \../lib/parse : {default: compiled-parse}
+delete require.extensions\.ls
+require! \babel-register : register
 
-babel-options =
-  presets: <[stage-0]>
-  plugins: <[transform-es2015-modules-commonjs]>
+function babel-options parse, plugins=[]
   parser-opts: parser: parse
+  presets: <[stage-0]>
+  plugins: plugins ++ <[transform-es2015-modules-commonjs]>
   extensions: <[.ls]>
-
-register babel-options
+register babel-options compiled-parse, <[istanbul]>
+require! \../src/parse : default: parse
+delete require.extensions\.ls
+register babel-options parse
 require \./index
+
+test _, 'Parse' <| (t) ->
+  t.throws _, 'throw on implemented node type' <| ->
+    parse \class source-file-name: \t.ls
+
+  actual = false
+  parse \1 source-file-name: \t.js parser: parse: -> actual := true
+  t.ok actual, 'pass not-ls code to original parser'
+  t.end!

@@ -22,14 +22,14 @@
   },
   "devDependencies": {
     "babel-core": "",
+    "babel-plugin-istanbul": "",
     "babel-plugin-transform-es2015-modules-commonjs": "",
-    "babel-preset-es2015-rollup": "",
+    "babel-plugin-external-helpers": "",
     "babel-preset-stage-0": "",
     "babel-register": "",
     "gulp": "",
-    "istanbul": "",
     "livescript": "",
-    "remap-istanbul": "",
+    "nyc": "",
     "rollup": "",
     "rollup-plugin-babel": "",
     "rollup-plugin-node-resolve": "",
@@ -38,7 +38,8 @@
   "scripts": {
     "prepublish": "gulp dist",
     "pretest": "gulp dist",
-    "test": "gulp"
+    "test": "nyc lsc test/run",
+    "posttest": "nyc report -r lcov -r json && mv coverage/coverage-final.json coverage/coverage.json"
   },
   "keywords": [
     "LiveScript",

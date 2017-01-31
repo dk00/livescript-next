@@ -105,7 +105,7 @@ function module-io {left, right} scope
 
 function map-values object, value
   Object.keys object .reduce _, {} <| (result, key) ->
-    result[key]? = value object[key]
+    result[key] = value object[key]
     result
 
 # Assign
@@ -138,7 +138,7 @@ transform.Prop = transform-lval 1
 function convert-variable
   name = it.value || it.name
   variable = (t.id name) <<< key: \Key == node-type it
-  type = if it.lval then DECL else if it.value then REF
+  type = if it.lval then DECL else if it.value then REF else void
   if type then variable <<< scope: (name): type
   else variable
 
@@ -357,8 +357,6 @@ function wrap-sequence
   if it.length > 0 then t.sequenceExpression it.map expr
   else literals.void
 
-function expand-cases => it.map -> t.switchCase it, []
-
 function switch-params [topic, cases, other=literals.void]
   test = if topic then (value, index) ->
     target = if index then (t.id \that) else cache-that topic, that: REF .0
@@ -397,7 +395,7 @@ function derive rewrite => -> (rewrite it) <<< {it.loc, it.scope}
 function anonymous => t.isFunction it and !it.id.name
 statement = derive ->
   | !anonymous it and t.toStatement it, true => that
-  | t.isExpression it => t.expressionStatement it
+  | _ => t.expressionStatement it # muse be expression
 
 function wrap-expression node => t.doExpression t.blockStatement [node]
 
@@ -415,7 +413,7 @@ literals\* = literals.void
 
 string-literal = derive ->
   | it.type == \StringLiteral => it
-  | it.name => t.stringLiteral that
+  | _ => t.stringLiteral it.name
 
 property = derive ->
   | it.type == \ObjectProperty => it

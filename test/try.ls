@@ -1,9 +1,6 @@
-import \../lib/compile : compile
-
 function main t
   t.throws _, 'throw nothing' <| -> throw
   t.throws _, 'throw something' <| -> throw 1
-  t.throws _, 'throw on unknown node type' <| -> compile \class
 
   actual = void
   try actual := true
