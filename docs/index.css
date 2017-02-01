@@ -1,0 +1,24 @@
+html, body, #root, .wrap, .wrap > * {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: black;
+  color: #aaa;
+}
+
+.wrap {
+  display: flex;
+}
+
+.wrap > * {
+  flex: 50%;
+  display: flex;
+  flex-direction: column;
+}
+
+.ace_editor {
+  flex: 1;
+}

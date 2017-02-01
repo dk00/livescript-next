@@ -1,0 +1,11 @@
+{
+  "name": "try-livescript",
+  "description": "Try LiveScript",
+  "license": "Unlicense",
+  "devDependencies": {
+    "browser-sync": "",
+    "gulp": "",
+    "preact": "",
+    "preact-render-to-string": ""
+  }
+}

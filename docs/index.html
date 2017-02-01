@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Try LiveScript</title>
+  <meta charset="utf-8">
+  <link rel="icon" href="//livescript.net/images/icon.png">
+  <link rel="stylesheet" href="index.css">
+  <script src="//unpkg.com/preact@7.2.0/dist/preact.min.js"></script>
+  <script src="//unpkg.com/redux@3.6.0/dist/redux.min.js"></script>
+  <script src="//livescript.net/livescript-1.5.0-min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/ace/1.2.6/ace.js"></script>
+  <script src="//unpkg.com/babel-standalone@6.22.1/babel.min.js"></script>
+  <script src="//unpkg.com/linking@0.0.2/dist/linking.js"></script>
+  <script src="//unpkg.com/livescript-next@0.0.1/dist/index.js"></script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="text/ls" src="index.ls"></script>
+  <script>
+    require('livescript').go()
+  </script>
+</body>
+
+</html>
