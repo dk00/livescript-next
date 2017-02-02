@@ -25,6 +25,13 @@ function main t
   result = {a: 1} <<< (b: 2)
   expecetd = a: 1 b: 2
   t.deep-equal result, expecetd, 'copy object properties'
+
+  function T a, b => @prop = {a, b}
+  t.ok new T, 'new operator without arguments'
+
+  actual = new T 0, 1
+  t.deep-equal [actual.a, actual.b] [0 1] 'new operator with arguments'
+
   t.end!
 
 export default: main

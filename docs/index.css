@@ -22,3 +22,7 @@ body {
 .ace_editor {
   flex: 1;
 }
+
+a {
+  color: green;
+}

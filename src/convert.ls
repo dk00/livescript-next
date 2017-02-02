@@ -237,8 +237,10 @@ t.NUMBER_BINARY_OPERATORS.concat ['' \+] .forEach -> t"#it=" = t.assignment
 
 t.infix-expression = (op, left, right, logic, soak) ->
   op .= replace /\.(.)\./ \$1
-  if right then t[op] op, left, right
-  else t.unaryExpression op, left
+  switch
+  | right => t[op] op, left, right
+  | op == \new => t.newExpression left, []
+  | _  => t.unaryExpression op, left
 
 t\<? = make-helper <[Math min]>
 t\>? = make-helper <[Math max]>
@@ -265,6 +267,7 @@ transform.Chain = ->
   return that if unfold-chain it
   it.tails.reduce _, it.head <| (tree, node) ->
     node <<< base: tree, children: [\base] ++ node.children
+transform.Call = -> if it.new then set-type it, \New else it
 
 function member-params [base, key] => * base, key, !key.key
 
@@ -438,6 +441,7 @@ t <<<
   Module: module-io
   Index: define build: \memberExpression params: member-params
   Call: define build: \callExpression
+  New: define build: \newExpression
   Unary: convert-infix, Binary: convert-infix, Assign: convert-infix
   Import: convert-infix
   Splat: define build: \spreadElement

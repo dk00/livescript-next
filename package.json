@@ -38,7 +38,7 @@
   "scripts": {
     "prepublish": "gulp dist",
     "pretest": "gulp dist",
-    "test": "nyc lsc test/run",
+    "test": "nyc --instrument false lsc test/run",
     "posttest": "nyc report -r lcov -r json && mv coverage/coverage-final.json coverage/coverage.json"
   },
   "keywords": [

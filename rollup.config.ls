@@ -1,1 +1,1 @@
-export moduleName: \lsnext exports: \named source-map: true use-strict: false
+export module-name: \lsnext exports: \named use-strict: false

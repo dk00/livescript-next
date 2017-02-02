@@ -5,7 +5,6 @@ function command args, options
   spawnSync args.0, (args.slice 1),
   Object.assign {+shell, stdio: \inherit} options
 
-function strip-content map => (map <<< sourcesContent: void)toString!
 function fix-require => it.replace /\.ls'\)/g "')"
 function write name, content
   new Promise (resolve) -> writeFile name, content, resolve
@@ -23,11 +22,8 @@ function rollup-config parse
 function build {dest}: options
   require! rollup: {rollup}
   rollup options .then ->
-    {code, map} = it.generate options
-    code = fix-require code
-    gen-code = write dest, code + "\n//# sourceMappingURL=../#dest.map"
-    gen-map = write "#dest.map" strip-content map if options.source-map
-    Promise.all [gen-code, gen-map]
+    code = fix-require <| it.generate options .code
+    write dest, code
 
 function babel-build filename, dest
   require! \babel-core : {transform-file} \./lib/parse : default: parse
@@ -50,7 +46,7 @@ function build-lib config
   external = external-deps ++ files.map -> require.resolve "./src/#it"
   Promise.all files.map (name) ->
     options =
-      entry: "src/#name.ls" external, source-map: true
+      entry: "src/#name.ls" external
       dest: "lib/#name.js" format: \cjs
     build options <<< config
 
