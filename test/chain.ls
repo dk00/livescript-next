@@ -50,6 +50,25 @@ function main t
   actual = [a.b?c.d, a.x?y.z]
   t.deep-equal actual, [true void] 'unfold chain after first position'
 
+  message = 'object slicing'
+  expected = b: 0 c: 1
+  a = one-time-getter {d: 2} <<< expected, message
+  actual = a!{b, c}
+  t.deep-equal actual, expected, message
+
+  message = 'array slicing'
+  expected = [3 1]
+  a = one-time-getter [3 2 1 0], message
+  actual = a![0 2]
+  t.deep-equal actual, expected, message
+
+  message = 'nested slicing'
+  a = one-time-getter b: 0 e: 1 g: 2 h: 3 j: 4, message
+  key = \b
+  expected = [0 0 c: 0 d: e: 1 f: [2 3] i: 4]
+  actual = a![\b, key, c: (key), d: {e, f: [\g, \h] i: j}]
+  t.deep-equal actual, expected, message
+
   t.ok
     .. .., 'cascade: 1 level'
 

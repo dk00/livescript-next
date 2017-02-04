@@ -207,6 +207,18 @@ function unwrap-left => it <<< children: [it.children.0.it, it.children.1]
 function strip-soak => it.tails.0.soak = void; it
 function strip-symbol => it.tails.0.symbol = \.; it
 
+function pack-slice node, val => if node.val then node <<< {val} else val
+function bind-slice slice, target, object
+  slice <<< items: slice.items.map (item, index) ->
+    base = if index then object else target
+    key = item.val || item
+    key = set-type key, \Key if item.val && \Var == node-type key
+    pack-slice item, if key.items then bind-slice key, base, object
+    else h \Index {base, key}
+function unfold-slice target, children: [object, [key: slice, ...tails]]
+  head = bind-slice slice, target, object
+  h \Chain {head, tails}
+
 function transform-unfold
   items = it.children
   tail = items.1.0 || {}
@@ -216,6 +228,7 @@ function transform-unfold
     | it.logic => * take-left, t[that] && logical.bind void that; strip-logic
     | tail.soak => [strip-soak]
     | tail.symbol == \.= => * strip-symbol, binary-node.bind void \=
+    | tail.key?items => * pass, unfold-slice
   return it unless [select, unfold=conditional, alt, replace=0]? = settings
 
   assign-cache = if should-bind it then cache-index else cache-ref
@@ -254,10 +267,10 @@ function split-chain chain, pivot
   head = transform chain <<< tails: chain.tails.slice 0 pivot
   (h \Chain {head, tails}) <<< children: [head, tails]
 
+chain-types = [(.soak), (.symbol == \.= ), (.key?items)]
 function unfold-chain
-  pivot = 1 + it.tails.find-index (.soak)
-  or 1 + it.tails.find-index (.symbol == \.= )
-  return if pivot < 1
+  pivot = 1 + it.tails.find-index (node) -> chain-types.find -> it node
+  return unless pivot
   chain = if pivot > 1 then split-chain it, pivot-1 else it
   result = transform-unfold chain
   chain.head = chain.children.0
@@ -420,6 +433,7 @@ string-literal = derive ->
 
 property = derive ->
   | it.type == \ObjectProperty => it
+  | it.type == \MemberExpression => t.objectProperty it.property, it
   | t.isSpreadElement it => it <<< type: \SpreadProperty
   | it.type == \AssignmentExpression
     t.objectProperty it.left, it <<< type: \AssignmentPattern, false true

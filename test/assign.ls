@@ -70,6 +70,12 @@ function main t
   {object-def=1} = {}
   t.equal object-def, 1 'destructure object with default values'
 
+  a = b: 0 c: 1 d: 2
+  expected = b: 0 c: 1 e: 3
+  actual = e: 3
+  actual{b, c} = a
+  t.deep-equal actual, expected, \substructuring
+
   unwrapped = void = null = 1
   t.equal unwrapped, 1 'unwrap assignment to void'
   t.end!
