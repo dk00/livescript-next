@@ -14,10 +14,7 @@
     "babel-types": ""
   },
   "peerDependencies": {
-    "babel-core": "",
-    "babel-plugin-transform-es2015-modules-commonjs": "",
     "babel-preset-stage-0": "",
-    "babel-register": "",
     "livescript": ""
   },
   "devDependencies": {

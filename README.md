@@ -6,6 +6,8 @@ Enable latest ES features for LiveScript.
 [![coverage](https://codecov.io/gh/dk00/livescript-next/branch/master/graph/badge.svg)](https://codecov.io/gh/dk00/livescript-next)
 [![npm](https://img.shields.io/npm/v/livescript-next.svg)](https://www.npmjs.com/package/livescript-next)
 
+[Try it here](//rawgit.com/dk00/livescript-next/master/docs/)
+
 This project works as a bridge from LiveScript to modern javascirpt, by converting AST:
 
 ls code -> LiveScript parser -> **convert** -> babel transform -> js
@@ -25,11 +27,17 @@ import { name0, name1 as alias1 } from "module";
 export { name, name as default, name as alias };
 ```
 
-See [wiki](/dk00/livescript-next/wiki) for what are added and what are going to be added.
+See [wiki](//github.com/dk00/livescript-next/wiki) for what are added and what are going to be added.
 
 ## Usage
 
-The `parse` function can be used by `babel` to parse `.ls` files, add this to babel options to enable it. Also add `stage-0` presets to handle [stage 0](/tc39/proposals/blob/master/stage-0-proposals.md) and [above](/tc39/proposals) ES features.
+Install required packages:
+
+```
+npm i --save-dev livescript livescript-next babel-plugin-preset-stage-0
+```
+
+The `parse` function can be used by `babel` to parse `.ls` files, add this to babel options to enable it. Also add `stage-0` presets to handle [stage 0](//github.com/tc39/proposals/blob/master/stage-0-proposals.md) and [above](//github.com/tc39/proposals) ES features.
 
 ```ls
 presets: <[stage-0]>
@@ -69,52 +77,4 @@ plugins: <[transform-es2015-modules-commonjs]>
 
 ## Require hook for node
 
-Use LiveScript with ES module `import`/`export` in node.
-
-ES module `import`/`export` is not supported by LiveScript (yet), but we can still use that js code literals (like the example).
-
-index.js
-```js
-require('livescript-next/register')
-require('./start')
-```
-
-start.ls
-```ls
-``
-import hello from './hello'
-import helloJs from './example'``
-
-console.log \start
-hello!
-hello-js!
-```
-
-hello.ls
-```ls
-``export default``
-function hello => console.log \hello
-```
-
-example.js
-```js
-export default () => console.log('hello js')
-```
-
-```
-npm i livescript livescript-next babel-register babel-core
-node index
-```
-
-```
-start
-hello
-hello js
-```
-
-### How does it work?
-
-Monkey patch `babel.transformFileSync`.
-
-`.ls` files are compiled by `LiveScript.compile`, then `babel.transform` to handle `import` / `export`.
-Other files are passed to original `transformFileSync`.
+See [examples](/examples)
