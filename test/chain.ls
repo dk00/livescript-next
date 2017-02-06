@@ -50,6 +50,11 @@ function main t
   actual = [a.b?c.d, a.x?y.z]
   t.deep-equal actual, [true void] 'unfold chain after first position'
 
+  expected = fn: -> @
+  bound = expected~fn
+  actual = bound!
+  t.equal actual, expected, 'bind property access'
+
   message = 'object slicing'
   expected = b: 0 c: 1
   a = one-time-getter {d: 2} <<< expected, message

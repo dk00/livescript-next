@@ -276,10 +276,14 @@ function unfold-chain
   chain.head = chain.children.0
   result
 
+function bind-prop
+  if \~ == it.symbol?1 then h \Bind {it}
+  else it
+
 transform.Chain = ->
   return that if unfold-chain it
   it.tails.reduce _, it.head <| (tree, node) ->
-    node <<< base: tree, children: [\base] ++ node.children
+    bind-prop node <<< base: tree, children: [\base] ++ node.children
 transform.Call = -> if it.new then set-type it, \New else it
 
 function member-params [base, key] => * base, key, !key.key
@@ -453,6 +457,7 @@ t <<<
   Prop: define build: \objectProperty params: property-params
 
   Module: module-io
+  Bind: define build: \bindExpression params: -> [null, it.0]
   Index: define build: \memberExpression params: member-params
   Call: define build: \callExpression
   New: define build: \newExpression
