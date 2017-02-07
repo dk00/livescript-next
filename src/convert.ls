@@ -120,7 +120,7 @@ function strip-assign => it <<< op: it.op?replace \: ''
 
 NONE = {+void, +null}
 transform.Assign = (node, scope) ->
-  | NONE[node.left.value] => node.right
+  | NONE[node.children.0.value] => node.children.1
   | _ => strip-assign set-lval transform-unfold node
 
 function transform-lval index=0 => (node, scope) ->
@@ -237,8 +237,15 @@ function transform-unfold
 
 # Infix
 
+function partial-operator node, scope
+  return if node.children.every -> it
+  node.children = node.children.map -> it || temporary \it
+  set-type node, \Assign if /[^=]?=$/test node.op
+  h \Fun params: [] body: h \Block lines: [node]
+
 transform.Parens = (node, scope) -> node.it
 transform.Binary = (node, scope) ->
+  partial-operator node, scope or
   transform-unfold transform-default node, scope
 
 convert-infix = define build: \infixExpression params: infix-params

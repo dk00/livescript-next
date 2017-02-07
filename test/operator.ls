@@ -26,6 +26,12 @@ function main t
   expecetd = a: 1 b: 2
   t.deep-equal result, expecetd, 'copy object properties'
 
+  add-left = (+ 1)
+  add-right = (1 +)
+  actual = [add-left 0; add-right 0]
+  expecetd = [1 1]
+  t.deep-equal actual, expecetd, 'partially apply operator'
+
   function T a, b => @prop = {a, b}
   t.ok new T, 'new operator without arguments'
 

@@ -42,6 +42,11 @@ function main t
   a? ?<?= 0
   t.equal a, 1 'hyper soak ? ?<?='
 
+  expected = {}
+  actual = (actual := )
+  actual expected
+  t.equal actual, expected, 'partially apply assignment'
+
   [c] = [a]
   t.equal c, a, 'destructuring assignment: array'
 
