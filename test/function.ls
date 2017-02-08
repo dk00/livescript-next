@@ -12,6 +12,10 @@ function main t
   d = -> return true
   t.ok d!, 'explicit return'
 
+  fn = !-> 1
+  t.equal fn!, void 'suppress automatic returning'
+
+
   [1 [t]] |> ([b, [c]]) -> t.equal c, t, 'destructured parameter'
 
   get-rest = (...r) -> r

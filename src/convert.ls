@@ -344,23 +344,24 @@ function omit-declared => it if it < DECL
 
 # Function
 
-transform.Fun = (node, _) -> node <<< params: node.params.map mark-lval
+function auto-return block, hushed
+  result = last block.lines
+  if !hushed && result && \Return != node-type result
+    block.lines = block.lines.slice 0 -1 .concat h \Return it: result
+  block
 
-function convert-return node
-  end = last node.body
-  node.body.push end = that if end?result
-  if end && !t.isReturnStatement end
-    node.body = node.body.slice 0 -1 .concat t.returnStatement expr end
-  node
-
-function fill-omitted => it.map (name, index) ->
-  if name.type == \UnaryPattern then t.id "arg#{index}$" else name
+transform.Fun = (node, _) ->
+  node <<< children:
+    node.params.map (arg, i) ->
+      mark-lval if \Literal == node-type arg then h \Var value: "arg#{i}$"
+      else arg
+    auto-return node.body, node.hushed
 
 function make-function [[params, block]]
   if params.length == 0 && (block.scope.it.&.(REF.|.ASSIGN))
     params := [t.id \it]
     block.scope.it = DECL
-  * * (fill-omitted params), convert-return block
+  * * params, block
     scope = map-values block.scope, omit-declared
 
 # If
@@ -424,7 +425,11 @@ statement = derive ->
   | !anonymous it and t.toStatement it, true => that
   | _ => t.expressionStatement it # muse be expression
 
-function wrap-expression node => t.doExpression t.blockStatement [node]
+function wrap-expression node
+  body = [node] ++ if node.body && last node.body .result
+    * statement that
+  else []
+  t.doExpression t.blockStatement body
 
 expr = derive (node) ->
   | t.isExpression node or t.isSpreadElement node => node
