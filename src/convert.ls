@@ -54,7 +54,7 @@ function define {types=none, input=pass, output=pass, params=pass, build}
 => (node, upper) ->
   [nodes, scope] = output _, upper
   <| reduce node.children, _, types
-  <| {upper\.cascade} <<< input upper, node
+  <| input upper, node
   (t[build] ...params nodes, node) <<< {scope}
 
 function expand-pair
@@ -297,26 +297,17 @@ function member-params [base, key] => * base, key, !key.key
 
 # Cascade
 
-cascade-key = \.cascade
-function cascade-name scope, inc => "x#{(scope[cascade-key] || 0) + inc}$"
-
 transform.Literal = (node, scope) ->
   return node if node.value != \..
-  set-type name: (cascade-name scope, 0), children: [], \Var
+  set-type node <<< value: \cascade$, \Var
 
+function index key, node => h \Index base: node, key: h \Literal value: key
 transform.Cascade = (node, scope) ->
-  set-type node.children.1, \CascadeBlock
-  node
-
-function next-cascade scope, node
-  {} <<< scope <<< (cascade-key): (scope[cascade-key] || 0) + 1
-
-function make-cascade [[input, output] scope]
-  cache = t.id name = cascade-name scope, 1
-  head = statement t.assignment \= cache, input
-  lines = unwrap-blocks output.body
-  last lines .result = cache
-  * [[head, ...lines]] scope <<< (name): DECL
+  target = binary-node \= (temporary \cascade$), node.children.0
+  cascade = binary-node \=, (temporary \ref$),
+    h \Arr items: [temporary \cascade$; target, node.children.1]
+  restore = binary-node \= (temporary \cascade$), index 0 temporary \ref$
+  h \Sequence lines: [cascade, restore; index 1 temporary \ref$]
 
 # Block
 
@@ -325,9 +316,10 @@ function declare names
 
 function close-scope upper, scope
   to-declare = -> (upper[it].|.0) < DECL && scope[it] >= DECL
+  declared = referenced = void
   Object.keys scope
-    declared = ..filter to-declare
-    referenced = ..filter -> !to-declare it
+    declared := ..filter to-declare
+    referenced := ..filter -> !to-declare it
     .reduce _, {} <| (result, key) -> result <<< (key): scope[key]
   declarations = declare declared if declared.length > 0
   * declarations, referenced
@@ -426,10 +418,8 @@ statement = derive ->
   | _ => t.expressionStatement it # muse be expression
 
 function wrap-expression node
-  body = [node] ++ if node.body && last node.body .result
-    * statement that
-  else []
-  t.doExpression t.blockStatement body
+  t.doExpression if node.type == \BlockStatement then node
+  else t.blockStatement [node]
 
 expr = derive (node) ->
   | t.isExpression node or t.isSpreadElement node => node
@@ -490,10 +480,6 @@ t <<<
     output: make-function
     params: (args, node) -> [t.id node.name || ''] ++ args
 
-  Cascade: define build: \blockStatement \
-    types: [, pass] output: make-cascade
-  CascadeBlock: define build: \blockStatement \
-    types: [statement] input: next-cascade
   Conditional: define build: \conditionalExpression
   If: define build: \ifStatement types: [void statement, statement] \
     output: make-if, params: if-params

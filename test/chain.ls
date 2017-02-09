@@ -82,13 +82,14 @@ function main t
     b = 1
       ..
 
+  b = c = d = e = f = g = void
   a = a!
-    b = .. + 1
-      c = .. + 1
-        d = .. + 1
-      e = .. + 1
-    f = .. + 1
-      g = .. + 1
+    b := .. + 1
+      c := .. + 1
+        d := .. + 1
+      e := .. + 1
+    f := .. + 1
+      g := .. + 1
   t.deep-equal [a, b, c, d, e, f, g] [1 2 3 4 3 2 3] 'nested cascade'
   t.end!
 
