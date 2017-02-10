@@ -372,26 +372,20 @@ function if-params args, node
   args
 
 # Switch
-# XXX wrapped even if there's only 1 to ensure the output compiles
-function wrap-sequence
-  if it.length > 0 then t.sequenceExpression it.map expr
-  else literals.void
 
-function switch-params [topic, cases, other=literals.void]
-  test = if topic then (value, index) ->
-    target = if index then (t.id \that) else cache-that topic, that: REF .0
-    t.binaryExpression \== target, value
-  else (value,, scope) -> cache-that value, scope .0
-  [cases.reduce-right _, (expr other) <| (chain, node, index) ->
-    t.conditionalExpression do
-      node.test.elements.map (value, sub) ->
-        test value, sub+index, (last node.consequent ?.scope) || empty
-      .reduce helpers.or
-      wrap-sequence node.consequent
-      chain]
-
-function case-params [tests, {body}] => * t.arrayExpression tests; body
-function make-switch [args, scope] => * args, scope <<< that: DECL
+function some => it.reduce (a, b) -> binary-node \|| a, b
+transform.Switch = (node) ->
+  ref = topic = void
+  [cache-cases, test-case] = if node.topic
+    [ref, topic] := cache-ref that, \that
+    [pass, -> binary-node \== ref, it]
+  else [-> binary-node \= (temporary \that), it]
+  other = node.default || h \Literal value: \void
+  node.cases.reduce-right _, other <| (rest, item, index) ->
+    cases = item.tests.map test-case || pass
+    cases.0.left = topic if topic && index == 0
+    test = cache-cases some cases
+    item <<< h \Conditional {test, then: item.body, else: rest}
 
 # Try
 
@@ -424,7 +418,6 @@ function wrap-expression node
 expr = derive (node) ->
   | t.isExpression node or t.isSpreadElement node => node
   | node.expression => that
-  | t.isFunction node => node <<< type: \FunctionExpression
   | node.body?length == 1 => expr node.body.0
   | _ => wrap-expression node
 
@@ -483,10 +476,6 @@ t <<<
   Conditional: define build: \conditionalExpression
   If: define build: \ifStatement types: [void statement, statement] \
     output: make-if, params: if-params
-  Switch: define build: \expressionStatement \
-    types: [pass, pass, pass] params: switch-params, output: make-switch
-  Case: define build: \switchCase \
-    types: [pass, pass] params: case-params
   Throw: define build: \throwStatement params: -> [it.0 || t.nullLiteral!]
   Try: define build: \tryStatement types: [pass, pass, pass] params: try-params
 
@@ -502,9 +491,6 @@ function make-helper names, associative=true
     | args.1.callee == fn && associative
       {} <<< args.1 <<< arguments: [args.0, ...args.1.arguments]
     | _ => t.callExpression fn, args
-
-helpers =
-  or: (a, b) -> t.logicalExpression \|| a, b
 
 function convert root
   program = t root, TOP
