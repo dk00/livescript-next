@@ -60,10 +60,10 @@ plugins: <[transform-es2015-modules-commonjs]>
   - [x] Basic support
   - [x] With default value
   - [x] Spread operator
-  - [ ] With label
+  - [ ] Named destructing
 - [x] External helper
 - [x] Block scope(optional)
-- [ ] Async function
+- [x] Async function
 - [ ] Arrow function
 - [ ] Class
 

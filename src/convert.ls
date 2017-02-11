@@ -291,7 +291,10 @@ transform.Chain = ->
   return that if unfold-chain it
   it.tails.reduce _, it.head <| (tree, node) ->
     bind-prop node <<< base: tree, children: [\base] ++ node.children
-transform.Call = -> if it.new then set-type it, \New else it
+transform.Call = ->
+  | it.new => set-type it, \New
+  | it.base.value == \await => transform-await it
+  | _ => it
 
 function member-params [base, key] => * base, key, !key.key
 
@@ -332,7 +335,7 @@ function make-block [[body] scope] upper
   head = if declarations then [that] else []
   * [head ++ unwrap-blocks body] referenced
 
-function omit-declared => it if it < DECL
+function omit-declared => if it < DECL then it else void
 
 # Function
 
@@ -343,17 +346,23 @@ function auto-return block, hushed
   block
 
 transform.Fun = (node, _) ->
+  name = if node.name then temporary that else void
   node <<< children:
-    node.params.map (arg, i) ->
+    name, node.params.map (arg, i) ->
       mark-lval if \Literal == node-type arg then h \Var value: "arg#{i}$"
       else arg
     auto-return node.body, node.hushed
 
-function make-function [[params, block]]
+function transform-await
+  (set-type it, \Await) <<< children: [it.children.1.0]
+
+function make-function [[name, params, block]]
   if params.length == 0 && (block.scope.it.&.(REF.|.ASSIGN))
     params := [t.id \it]
     block.scope.it = DECL
-  * * params, block
+  async = !!block.scope\.await
+  block.scope\.await = DECL
+  * * name, params, block,, async
     scope = map-values block.scope, omit-declared
 
 # If
@@ -406,7 +415,7 @@ function lval
 
 function derive rewrite => -> (rewrite it) <<< {it.loc, it.scope}
 
-function anonymous => t.isFunction it and !it.id.name
+function anonymous => t.isFunction it and !it.id
 statement = derive ->
   | !anonymous it and t.toStatement it, true => that
   | _ => t.expressionStatement it # muse be expression
@@ -467,11 +476,11 @@ t <<<
   Sequence: define build: \sequence
 
   Return: define build: \returnStatement
+  Await: define build: \awaitExpression input: -> it <<< \.await : REF
   Fun: define do
-    build: \functionExpression types: [lval, statement]
+    build: \functionExpression types: [, lval, statement]
     input: (, node) -> {}
     output: make-function
-    params: (args, node) -> [t.id node.name || ''] ++ args
 
   Conditional: define build: \conditionalExpression
   If: define build: \ifStatement types: [void statement, statement] \

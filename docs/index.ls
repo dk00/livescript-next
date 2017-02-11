@@ -51,6 +51,9 @@ function todo-app {items, text, handle-submit, handle-change}
 
 render (connected todo-app)!, mound-node
 
+function async-fetch
+  data = await <| await fetch \\https://api.github.com/gists/public .json!
+
 function nested-destructing [a, b: [{c, d: e}=get-default!]] ...rest
   existence? = c!
   if test a, c then that
