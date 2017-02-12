@@ -35,26 +35,24 @@ function merge scope, nested={}
   Object.keys nested .forEach (key) -> scope[key] .|.= nested[key]
   scope
 
-function convert-arg arg, scope, convert-type
-  []concat arg .reduce ([nodes, scope] arg) ->
-    return [nodes ++ arg, scope] unless arg
-    node = convert-type t arg, scope
-    * nodes ++ node, merge scope, node.scope
-  , [[] scope]
-    ..0 = ..0.0 unless arg?reduce
+function pack-scope => [it, it.scope]
+function reduce children, upper
+  children.reduce? ([args, scope] arg) ->
+    return [args ++ arg, scope] unless arg
+    [sub-args, next-scope] = reduce arg, scope
+    * args ++ [sub-args] merge scope, next-scope
+  , [[] upper] or pack-scope t children, upper
 
-function reduce children, upper, types
-  children.reduce ([args, scope] arg, index) ->
-    [sub-args, next-scope] =
-      convert-arg arg, scope, types[index] || expr
-    * args ++ [sub-args] next-scope
-  , [[] Object.create upper]
+function convert-type children, types
+  children.map (nodes, index) ->
+    convert = types[index] || expr
+    nodes && list-apply nodes, -> it && convert it
 
 function define {types=none, input=pass, output=pass, params=pass, build}
 => (node, upper) ->
-  [nodes, scope] = output _, upper
-  <| reduce node.children, _, types
-  <| input upper, node
+  [nodes, scope] = reduce node.children, Object.create input upper, node
+  nodes = convert-type nodes, types
+  [nodes, scope] = output [nodes, scope] upper
   (t[build] ...params nodes, node) <<< {scope}
 
 function expand-pair
@@ -283,9 +281,7 @@ function unfold-chain
   chain.head = chain.children.0
   result
 
-function bind-prop
-  if \~ == it.symbol?1 then h \Bind {it}
-  else it
+function bind-prop => if \~ == it.symbol?1 then h \Bind {it} else it
 
 transform.Chain = ->
   return that if unfold-chain it
@@ -357,7 +353,7 @@ function transform-await
   (set-type it, \Await) <<< children: [it.children.1.0]
 
 function make-function [[name, params, block]]
-  if params.length == 0 && (block.scope.it.&.(REF.|.ASSIGN))
+  if params.length == 0 and block.scope.it .&. REF
     params := [t.id \it]
     block.scope.it = DECL
   async = !!block.scope\.await
@@ -368,7 +364,7 @@ function make-function [[name, params, block]]
 # If
 
 function cache-that test, scope
-  if scope.that.&.(REF.|.ASSIGN)
+  if scope.that .&. REF
     * t.assignment \= (t.id \that), test; scope <<< that: DECL
   else [test, scope]
 
@@ -451,7 +447,7 @@ function property-params [key, value]
   * key, value, computed = !key.key, shorthand = key == value
 
 t <<<
-  unk: -> throw "Unimplemented node type: #{node-type it}"
+  unk: -> throw "not implemented: #{node-type it}"
 
   Literal: -> literals[it.value] or t.valueToNode eval it.value
   Key: convert-variable, Var: convert-variable

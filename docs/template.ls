@@ -21,7 +21,7 @@ options =
     \//cdnjs.cloudflare.com/ajax/libs/ace/1.2.6/ace.js
     \//unpkg.com/babel-standalone@6.22.1/babel.min.js
     \//unpkg.com/linking@0.0.2/dist/linking.js
-    \//unpkg.com/livescript-next@0.0.1/dist/index.js
+    \//unpkg.com/livescript-next
 
 function render-html
   h \html,, (head options), h \body,,
