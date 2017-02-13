@@ -52,7 +52,7 @@ function define {types=none, input=pass, output=pass, params=pass, build}
 => (node, upper) ->
   [nodes, scope] = reduce node.children, Object.create input upper, node
   nodes = convert-type nodes, types
-  [nodes, scope] = output [nodes, scope] upper
+  [nodes, scope] = output [nodes, scope]
   (t[build] ...params nodes, node) <<< {scope}
 
 function expand-pair
@@ -313,25 +313,19 @@ transform.Cascade = (node, scope) ->
 function declare names
   t.variableDeclaration \let names.map -> t.variableDeclarator t.id it
 
-function close-scope upper, scope
-  to-declare = -> (upper[it].|.0) < DECL && scope[it] >= DECL
-  declared = referenced = void
-  Object.keys scope
-    declared := ..filter to-declare
-    referenced := ..filter -> !to-declare it
-    .reduce _, {} <| (result, key) -> result <<< (key): scope[key]
-  declarations = declare declared if declared.length > 0
-  * declarations, referenced
-
 function unwrap-blocks => it.reduce _, [] <| (body, node) ->
   body ++= if t.isBlock node then node.body else [node]
 
-function make-block [[body] scope] upper
-  [declarations, referenced] = close-scope upper, scope
-  head = if declarations then [that] else []
-  * [head ++ unwrap-blocks body] referenced
+function make-block [[body] scope]
+  * [unwrap-blocks body] scope
 
 function omit-declared => if it < DECL then it else void
+
+function declare-vars block, known={}
+  names = Object.keys block.scope .filter ->
+    !(known[it].&.DECL) && (block.scope[it].&.DECL)
+  block.body.unshift declare names if names.length > 0
+  block
 
 # Function
 
@@ -353,12 +347,13 @@ function transform-await
   (set-type it, \Await) <<< children: [it.children.1.0]
 
 function make-function [[name, params, block]]
-  if params.length == 0 and block.scope.it .&. REF
-    params := [t.id \it]
+  if params.length == 0 && block.scope.it .&. REF
+    params := [(t.id \it) <<< scope: it: DECL]
     block.scope.it = DECL
+  body = declare-vars block, Object.assign {} ...params.map (.scope)
   async = !!block.scope\.await
   block.scope\.await = DECL
-  * * name, params, block,, async
+  * * name, params, body,, async
     scope = map-values block.scope, omit-declared
 
 # If
@@ -395,7 +390,7 @@ transform.Switch = (node) ->
 # Try
 
 function try-params [block, recovery, finalizer]
-  {body: [, expression: left: param; ...body]}? = recovery
+  {body: [expression: left: param; ...body]}? = recovery
   handler = t.catchClause param || (t.id \e), t.blockStatement body || []
   * block, handler, finalizer
 
@@ -498,7 +493,7 @@ function make-helper names, associative=true
     | _ => t.callExpression fn, args
 
 function convert root
-  program = t root, TOP
+  program = declare-vars t root, TOP
     ..type = \Program
   t.file program, [] []
     ..loc = program.loc
