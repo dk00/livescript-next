@@ -80,6 +80,7 @@ status = link (-> h \div,, it.status), (.{status})
 ls = require \livescript
 options =
   next: -> lsnext.compile it .code
+  parse: -> JSON.stringify (lsnext.parse it, {source-file-name: \t.ls}),, 2
   compile: -> ls.compile it, bare: true
   ast: -> ls.ast it
   lex: -> ls.lex it

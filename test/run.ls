@@ -15,7 +15,7 @@ require \./index
 
 test _, 'Parse' <| (t) ->
   t.throws _, 'throw on implemented node type' <| ->
-    parse \class source-file-name: \t.ls
+    parse \class
 
   actual = false
   parse \1 source-file-name: \t.js parser: parse: -> actual := true
