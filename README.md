@@ -8,11 +8,11 @@ Enable latest ES features for LiveScript.
 
 [Try it here](//rawgit.com/dk00/livescript-next/master/docs/)
 
-This project works as a bridge from LiveScript to modern javascirpt, by converting AST:
+This project implements a bridge from LiveScript to modern JavaScript, by converting the LiveScript AST into Babel AST and then using the Babel toolchain to generate JS:
 
-ls code -> LiveScript parser -> **convert** -> babel transform -> js
+LS code -> LiveScript parser -> **convert** -> Babel AST -> Babel transform -> JS
 
-ES modules can be used without js code literals, use `import` and `export` instead, just like using `require!`.
+ES modules can be used without JS code literals, use `import` and `export` instead, just like using `require!`:
 
 ```ls
 import name, name1: alias
