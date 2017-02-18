@@ -12,11 +12,13 @@ attr-keys = {+op, +name, +value}
 function h display-name, props
   children = Object.keys props .filter -> !attr-keys[it]
   {constructor: {display-name} children} <<< props
+function q type, ...children => {type, children}
 
 function transform node
+  return node unless node
   node.type = node-type node
   node.children .= map (node.) if \string == typeof node.children.0
-  next = transform[node-type node]? node or node
+  next = transform[node.type]? node or node
   if next && next != node then transform next else next
 
 function transform-children
@@ -28,7 +30,7 @@ function build => t[it.type] it
 
 function define node-type, ...child-types
   build = t[node-type] || t.unk
-  types = child-types.map -> t[it || \expression] if it != \pass
+  types = child-types.map -> if it != \pass then t[it || \expression] else void
   convert-type = (arg, index) ->
     if arg && types[index] then list-apply arg, that else arg
   -> build ...it.children.map convert-type
@@ -81,16 +83,57 @@ function set-type node, name => node <<< type: name
 
 # Module
 
-function convert-module
-  it <<< lines: it.lines.map transform-module
-  transform it |> t _, empty |> declare-vars _, empty
+function module-type => switch
+  | \Import != node-type it or !it.left =>
+  | it.left.value == \this => \ImportM
+  | it.left.verb == \out => \ExportM
+
+function wrap-module {right} type
+  h type, items: if right.items then that.map expand-shorthand
+  else [expand-shorthand right]
 
 function transform-module
-  if is-module it then set-type it, \Module else it
+  if module-type it then wrap-module it, that else it
 
-function is-module
-  \Import == node-type it and
-  it.left && (it.left.value == \this || it.left.verb == \out)
+function convert-module
+  declare-vars _, empty <| t _, empty <|
+  (transform it) <<< children: [it.lines.map transform-module]
+
+function specify-member which, members
+  type = h \Node value: which
+  members.map ({key, val}) ->
+    h \Specifier module: type, local: val, member: key
+
+function module-source
+  if \Literal != node-type it
+    it <<< h \Literal value: "'#{it.name || it.value}'"
+  else it
+
+function module-members => it.children.0 || [val: it]
+function declare-module type, items
+  q \Block items.map (children: [source, node]) ->
+    members = specify-member type, module-members transform node
+    q type, members, source && module-source source
+
+post-transform.ImportM = -> declare-module \Import it.children.0
+export-external = (.children.1.items || it.children.0.value)
+function export-local => !export-external it
+post-transform.ExportM = ->
+  items = it.children.0
+  local = items.filter export-local
+  head = if local.length > 0 then [q \Prop void h \Obj items: local] else []
+  declare-module \Export head ++ items.filter export-external
+
+t.specifier = (type, local, member) ->
+  [range, ...params] =
+    | !member => [\Default local]
+    | member.operator == \void => [\Namespace local]
+    | _ => ['' local, member]
+  t"#type#{range}Specifier" ...params
+
+t.export = (specifiers, source) ->
+  # Work around leebyron/ecmascript-export-default-from, babel doesn't allow it
+  type: \ExportNamedDeclaration specifiers, source: source
 
 function pack-export
   base = it.filter -> it.0.type == \Identifier
@@ -124,6 +167,14 @@ function map-values object, value
     result[key] = value object[key]
     result
 
+function expand-shorthand
+  if it.children.length < 1
+    h \Prop key: it, val: (h \Var value: it.name) <<< it
+  else it
+
+transform.Obj = ->
+  transform.Arr it <<< children: [it.children.0.map expand-shorthand]
+
 # Assign
 
 function mark-lval => if it.value != \void then it <<< lval: true else null
@@ -133,11 +184,16 @@ function set-lval
   it
 
 function strip-assign => it <<< op: it.op?replace \: ''
+function rewrite-assign => switch
+  | rewrite-binary[it.op] => that it
+  | rewrite-binary[it.op?slice 0 -1]
+    it <<< op: \= children: [it.children.0, that it]
+  | _ => it
 
 NONE = {+void, +null}
 transform.Assign = (node) ->
   | NONE[node.children.0.value] => node.children.1
-  | _ => rewrite-binary strip-assign set-lval transform-unfold node
+  | _ => rewrite-assign strip-assign set-lval transform-unfold node
 post-transform.Assign = with-op
 
 function transform-lval index=0 => (node, scope) ->
@@ -145,14 +201,18 @@ function transform-lval index=0 => (node, scope) ->
   node.children[index] = list-apply node.children[index], mark-lval
   node
 
-<[Arr Obj Splat Existence]>forEach -> transform[it] = transform-lval!
+<[Arr Splat Existence]>forEach -> transform[it] = transform-lval!
 
-#TODO use this only in LVal Obj
 function transform-default node, scope
   return node unless node.lval
   next = set-type _, \Assign <| transform-lval! node, scope
   next <<< op: \=
 transform.Prop = transform-lval 1
+
+function convert-variable
+  name = it.value || it.name
+  access = if it.lval then DECL else if it.value then REF else void
+  (t.identifier name) <<< key: (\Key == node-type it), scope: (name): access
 
 t.assignment = (op, left, right) ->
   t.assignmentExpression op, (lval left), right
@@ -220,7 +280,7 @@ function bind-slice slice, target, object
   slice <<< items: slice.items.map (item, index) ->
     base = if index then object else target
     key = item.val || item
-    key = set-type key, \Key if item.val && \Var == node-type key
+    key <<< h \Key name: key.value if item.val && \Var == node-type key
     pack-slice item, if key.items then bind-slice key, base, object
     else h \Index {base, key}
 function unfold-slice target, children: [object, [key: slice, ...tails]]
@@ -248,7 +308,7 @@ function transform-unfold
 function partial-operator node, scope
   return if node.children.every -> it
   node.children = node.children.map -> it || temporary \it
-  set-type node, \Assign if /[^=]?=$/test node.op
+  node <<< constructor: display-name: \Assign if /[^=]?=$/test node.op
   h \Fun params: [] body: h \Block lines: [node]
 
 transform.Parens = (node, scope) -> node.it
@@ -256,6 +316,9 @@ transform.Parens = (node, scope) -> node.it
 function with-op
   op = type: \Node children: [] value: it.op.replace /\.(.)\./ \$1
   it <<< children: [op, ...it.children]
+
+transform.Unary = ->
+  if it.op == \new then it <<< q \New it.children.0, [] else it
 post-transform.Unary = with-op
 post-transform.Binary = with-op
 post-transform.Logical = with-op
@@ -264,10 +327,11 @@ function rewrite-binary => rewrite-binary[it.op]? it or it
 rewrite-binary <<<
   \|| : rewrite-logical, \&& : rewrite-logical,
   \++ : rewrite-concat, \++= : rewrite-push
+  \<? : rewrite-compare, \>? : rewrite-compare
 function rewrite-logical => set-type it, \Logical
 
 transform.Binary = (node) ->
-  partial-operator node or transform-unfold rewrite-binary node
+  partial-operator node or transform-unfold transform-default rewrite-binary node
 
 convert-infix = define build: \infixExpression params: infix-params
 function infix-params args, node => [node.op] ++ args ++ node<[logic soak]>
@@ -279,13 +343,18 @@ t.NUMBER_BINARY_OPERATORS.concat ['' \+] .forEach -> t"#it=" = t.assignment
 t\<? = make-helper <[Math min]>
 t\>? = make-helper <[Math max]>
 
+function rewrite-compare {op, children}
+  key = if op.0 == \< then \min else \max
+  base = h \Index base: (temporary \Math), key: h \Key name: key
+  h \Call {base, args: children}
+
 function rewrite-concat children: [source, value]
   base = h \Index base: source, key: h \Key name: \concat
   h \Call {base, args: [value]}
 
 function rewrite-push children: [source, value]
   base = h \Index base: source, key: h \Key name: \push
-  h \Sequence lines: [h \Call {base, args: [value]}; source]
+  h \Sequence lines: [h \Call {base, args: [h \Splat it: value]}; source]
 
 t.object-import = make-helper [\Object \assign] false
 
@@ -344,11 +413,9 @@ transform.Cascade = (node, scope) ->
 function declare names
   t.variableDeclaration \let names.map -> t.variableDeclarator t.id it
 
+post-convert.Block = -> it <<< children: [unwrap-blocks it.children.0]
 function unwrap-blocks => it.reduce _, [] <| (body, node) ->
   body ++= if t.isBlock node then node.body else [node]
-
-function make-block [[body] scope]
-  * [unwrap-blocks body] scope
 
 function omit-declared => if it < DECL then it else void
 
@@ -374,6 +441,7 @@ transform.Fun = (node) ->
       else arg
     auto-return node.body, node.hushed
 
+post-convert.Await = -> it <<< scope: it.scope <<< '.await': REF
 function transform-await
   (set-type it, \Await) <<< children: [it.children.1.0]
 
@@ -422,10 +490,14 @@ transform.Switch = (node) ->
 
 # Try
 
-function try-params [block, recovery, finalizer]
+transform.Throw = -> it.children.0 ||= nodes.null; it
+
+t.try = (block, recovery, finalizer) ->
   {body: [expression: left: param; ...body]}? = recovery
-  handler = t.catchClause param || (t.id \e), t.blockStatement body || []
-  * block, handler, finalizer
+  handler = if recovery || !finalizer
+    t.catch-clause param || (t.identifier \e), t.block-statement body || []
+  else void
+  t.try-statement block, handler, finalizer
 
 #Child types
 
@@ -450,6 +522,7 @@ function wrap-expression node
   else t.blockStatement [node]
 
 t.expression = (node) ->
+  | !node => node
   | t.isExpression node or t.isSpreadElement node => node
   | node.expression => that
   | node.body?length == 1 => t.expression node.body.0
@@ -470,7 +543,6 @@ function convert-property => switch
   | t.isSpreadElement it => it <<< type: \SpreadProperty
   | it.type == \AssignmentExpression
     t.property it.left, it <<< type: \AssignmentPattern
-  | _ => t.property it, it
 
 t.object = (properties) ->
   t.object-expression properties.map convert-property
@@ -483,24 +555,25 @@ t <<<
 
   Node: (.value)
   Literal: -> literals[it.value] or t.valueToNode eval it.value
-  Key: -> (t.identifier it.name) <<< key: true
-  Var: -> (t.identifier it.value) <<<
-    scope: (it.value): if it.lval then DECL else REF
+  Key: convert-variable, Var: convert-variable
 
   Arr: define \ArrayExpression \expression
-  Obj: define \object \pass
-  Prop: define \property
+  Obj: define \object
+  Prop: define \property \expression \expression
 
-  Module: module-io
+  Import: define \ImportDeclaration
+  Export: define \export
+  Specifier: define \specifier
+
   Bind: define \BindExpression
   Index: define \member \expression \expression
   Call: define \CallExpression \expression \expression
   New: define \NewExpression \expression
+
   Unary: define \UnaryExpression \pass \expression
   Logical: define \LogicalExpression \pass \expression \expression
   Binary: define \BinaryExpression \pass \expression \expression
   Assign: define \AssignmentExpression \pass \lval \expression
-  Import: convert-infix
   Splat: define \SpreadElement \expression
 
   Block: define \BlockStatement \statement
@@ -508,12 +581,12 @@ t <<<
 
   Return: define \ReturnStatement \expression
   Await: define \AwaitExpression
-  Fun: define \function \pass \lval \pass
+  Fun: define \function \pass \lval
 
   Conditional: define \ConditionalExpression '' '' ''
   If: define \IfStatement \expression \statement \statement
   Throw: define \ThrowStatement \expression
-  Try: define build: \TryStatement types: [pass, pass, pass] params: try-params
+  Try: define \try \pass \pass \pass
 
 function member
   it.0 = if \object == typeof it.0 then it.0 else t.id it.0
