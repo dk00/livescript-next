@@ -376,7 +376,7 @@ function auto-return block, hushed
 transform.Fun = (node) ->
   name = if node.name then temporary that else void
   node <<< children:
-    name, node.params.map (arg, i) ->
+    (h \Node value: node), name, node.params.map (arg, i) ->
       mark-lval if \Literal == node-type arg then h \Var value: "arg#{i}$"
       else arg
     auto-return node.body, node.hushed
@@ -385,16 +385,16 @@ post-convert.Await = -> it <<< scope: it.scope <<< '.await': REF
 function transform-await
   (set-type it, \Await) <<< children: [it.children.1.0]
 
-t.function = (name, params, block) ->
+t.function = ({bound} name, params, block) ->
   if params.length == 0 && block.scope.it .&. REF
     params := [(t.identifier \it) <<< scope: it: DECL]
-    block.scope.it = DECL
   body = declare-vars block, Object.assign {} ...params.map (.scope)
   async = !!block.scope\.await
-  block.scope\.await = DECL
-  type = \functionExpression
-  t[type] name, params, body,, async
-    ..scope = map-values block.scope, omit-declared
+  scope = map-values (block.scope <<< \.await : DECL, it: DECL), omit-declared
+
+  result = if bound then t.arrow-function-expression params, body, async
+  else t.function-expression name, params, body,, async
+  result <<< {scope}
 
 # If
 
@@ -512,7 +512,7 @@ t <<<
 
   Return: define \ReturnStatement \expression
   Await: define \AwaitExpression \expression
-  Fun: define \function \pass \lval
+  Fun: define \function \pass \pass \lval
 
   Conditional: define \ConditionalExpression '' '' ''
   If: define \IfStatement \expression \statement \statement

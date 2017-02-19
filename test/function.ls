@@ -20,6 +20,11 @@ function main t
   get-rest = (...r) -> r
   t.deep-equal (get-rest 0 1), [0 1] 'pack rest parameters'
 
+  expected = @
+  fn = ~> @
+  actual = fn!
+  t.equal actual, expected, 'bind this lexically'
+
   expected = -> await expected
   actual = expected!
   t.ok actual.then, 'the async function returns a Promise'
