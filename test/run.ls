@@ -14,7 +14,7 @@ register babel-options parse
 require \./index
 
 test _, 'Parse' <| (t) ->
-  t.throws _, 'throw on implemented node type' <| ->
+  t.throws _, 'throw on not implemented node type' <| ->
     parse \class
 
   actual = false

@@ -16,8 +16,6 @@ function main t
 
   actual = []
   try actual.push \try
-  catch
-    actual.push \catch
   finally actual.push \finally
   t.deep-equal actual, <[try finally]> 'finalize'
 

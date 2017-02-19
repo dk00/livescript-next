@@ -8,22 +8,39 @@ function L
 function pass => it
 node-type = (.constructor.display-name)
 
+attr-keys = {+op, +name, +value}
 function h display-name, props
-  children = Object.keys props .filter -> it != \op
+  children = Object.keys props .filter -> !attr-keys[it]
   {constructor: {display-name} children} <<< props
+function q type, ...children => {type, children}
 
-function transform node, scope
+function transform node
+  return node unless node
+  node.type = node-type node
   node.children .= map (node.) if \string == typeof node.children.0
-  next = transform[node-type node]? node, scope
-  if next && next != node then transform next else node
+  next = transform[node.type]? node or node
+  if next && next != node then transform next else next
 
-function t original, scope
-  node = transform original, scope
-  convert-node = t[node-type node] || t.unk
-  convert-node node, scope
-    ..loc = L original
+function transform-children
+  it && it <<< children: it.children.map -> it && list-apply it, transform
+function post-transform => post-transform[it.type]? it or it
+function post-convert => post-convert[it.type]? it or it
+
+function build => t[it.type]? it or t.unk it
+function define node-type, ...child-types
+  build = t[node-type]
+  types = child-types.map -> if it != \pass then t[it || \expression] else void
+  convert-type = (arg, index) ->
+    if arg && types[index] then list-apply arg, that else arg
+  -> build ...it.children.map convert-type
+    ..loc = L it
+    ..scope ||= it.scope
+
+function t node, scope
+  build if node.children.length < 1 then node
+  else post-convert convert-children post-transform transform-children node
+
 t <<< types
-t.id = -> t.identifier it
 # work around babel/babel#4741
 t.objectProperty = (key, value, computed, shorthand) ->
   {type: \ObjectProperty key, value, computed, shorthand}
@@ -36,75 +53,85 @@ function merge scope, nested={}
   scope
 
 function pack-scope => [it, it.scope]
-function reduce children, upper
-  children.reduce? ([args, scope] arg) ->
+function convert-all nodes, upper
+  nodes.reduce? ([args, scope] arg) ->
     return [args ++ arg, scope] unless arg
-    [sub-args, next-scope] = reduce arg, scope
+    [sub-args, next-scope] = convert-all arg, scope
     * args ++ [sub-args] merge scope, next-scope
-  , [[] upper] or pack-scope t children, upper
+  , [[] upper] or pack-scope t nodes, upper
 
-function convert-type children, types
-  children.map (nodes, index) ->
-    convert = types[index] || expr
-    nodes && list-apply nodes, -> it && convert it
+function convert-children
+  scope = Object.create it.scope || empty
+  [children, scope] = convert-all it.children, scope
+  {} <<< it <<< {children, scope}
 
-function define {types=none, input=pass, output=pass, params=pass, build}
-=> (node, upper) ->
-  [nodes, scope] = reduce node.children, Object.create input upper, node
-  nodes = convert-type nodes, types
-  [nodes, scope] = output [nodes, scope]
-  (t[build] ...params nodes, node) <<< {scope}
-
-function expand-pair
-  if it.type == \Identifier then [[it, it]] else it
-
-function list
-  result = it.properties?map ->; * it.key, list it.value
-  result || it
-
-function set-type node, name => node <<< constructor: display-name: name
+function set-type node, name => node <<< type: name
 
 # Module
 
-is-import = (.value == \this)
-function is-module {left} scope
-  (is-import left or left.verb == \out) && scope\.top
+function module-type {left={}} => switch
+  | left.value == \this => \ImportM
+  | left.verb == \out => \ExportM
 
-transform.Import = (node, scope) ->
-  if is-module node, scope then set-type node, \Module
-  else node <<< op: \objectImport + (node.all || '')
+function wrap-module {right} type
+  h type, items: if right.items then that.map expand-shorthand
+  else [expand-shorthand right]
 
-function pack-export
-  base = it.filter -> it.0.type == \Identifier
-  it.filter -> it.0.type != \Identifier
-  .map ([from, name]) -> [from, [[name, t.id \default]]]
-  .concat if base.length > 0 then [[void base]] else []
+function transform-module
+  if module-type it then wrap-module it, that else it
 
-function pack-import => it.map ([source, name]) -> ;* source, [[name]]
-function specify-import alias, name
-  type = if \Identifier == name.type then \Default else \Namespace
-  if alias && type != \Namespace then t.importSpecifier alias, name
-  else t"import#{type}Specifier" alias || name
+function convert-module
+  declare-vars _, empty <| t _, empty <|
+  (transform it) <<< children: [it.lines.map transform-module]
 
-function module-declare extended, base, declare, specify, pack
-  extended.concat if base.length > 0 then pack base else []
-  .map ([from, names]) ->
-    source = string-literal that if from
-    declare _, source <| names.map ([name, alias]) -> specify alias, name
+function specify-member which, members
+  type = h \Node value: which
+  members.map ({key, val}) ->
+    h \Specifier module: type, local: val, member: key
 
-function module-io {left, right} scope
-  items = list expand-pair t right, scope
-  base = items.filter -> !it.1.map
-  extended = items.filter (.1.map)
-  t.blockStatement module-declare extended, base, ...if is-import left
-    * t.importDeclaration, specify-import, pack-import
-  else
-    * t.exportNamedDeclaration.bind void void; t.exportSpecifier, pack-export
+function module-source
+  if \Literal != node-type it
+    it <<< h \Literal value: "'#{it.name || it.value}'"
+  else it
+
+function module-members => it.children.0 || [val: it]
+function declare-module type, items
+  q \Block items.map (children: [source, node]) ->
+    members = specify-member type, module-members transform node
+    q type, members, source && module-source source
+
+post-transform.ImportM = -> declare-module \Import it.children.0
+export-external = (.children.1.items || it.children.0.value)
+function export-local => !export-external it
+post-transform.ExportM = ->
+  items = it.children.0
+  local = items.filter export-local
+  head = if local.length > 0 then [q \Prop void h \Obj items: local] else []
+  declare-module \Export head ++ items.filter export-external
+
+t.specifier = (type, local, member) ->
+  [range, ...params] =
+    | !member => [\Default local]
+    | member.operator == \void => [\Namespace local]
+    | _ => ['' local, member]
+  t"#type#{range}Specifier" ...params
+
+t.export = (specifiers, source) ->
+  # Work around leebyron/ecmascript-export-default-from, babel doesn't allow it
+  type: \ExportNamedDeclaration specifiers, source: source
 
 function map-values object, value
   Object.keys object .reduce _, {} <| (result, key) ->
     result[key] = value object[key]
     result
+
+function expand-shorthand
+  if it.children.length < 1
+    h \Prop key: it, val: (h \Var value: it.name) <<< it
+  else it
+
+transform.Obj = ->
+  transform.Arr it <<< children: [it.children.0.map expand-shorthand]
 
 # Assign
 
@@ -115,44 +142,38 @@ function set-lval
   it
 
 function strip-assign => it <<< op: it.op?replace \: ''
+function rewrite-assign => switch
+  | rewrite-binary[it.op] => that it
+  | rewrite-binary[it.op?slice 0 -1]
+    it <<< op: \= children: [it.children.0, that it]
+  | _ => it
 
 NONE = {+void, +null}
-transform.Assign = (node, scope) ->
+transform.Assign = (node) ->
   | NONE[node.children.0.value] => node.children.1
-  | _ => strip-assign set-lval transform-unfold node
+  | _ => rewrite-assign strip-assign set-lval transform-unfold node
+post-transform.Assign = with-op
 
-function transform-lval index=0 => (node, scope) ->
+function transform-lval index=0 => (node) ->
   return node unless node.lval
   node.children[index] = list-apply node.children[index], mark-lval
   node
 
-<[Arr Obj Splat Existence]>forEach -> transform[it] = transform-lval!
-function transform-default node, scope
+<[Arr Splat Existence]>forEach -> transform[it] = transform-lval!
+
+function transform-default node
   return node unless node.lval
-  next = set-type _, \Assign <| transform-lval! node, scope
+  next = set-type _, \Assign <| transform-lval! node
   next <<< op: \=
 transform.Prop = transform-lval 1
 
 function convert-variable
   name = it.value || it.name
-  variable = (t.id name) <<< key: \Key == node-type it
-  type = if it.lval then DECL else if it.value then REF else void
-  if type then variable <<< scope: (name): type
-  else variable
-
-t.assignment = (op, left, right) ->
-  t.assignmentExpression op, (lval left), right
-
-t\<?= = t\>?= = (op, left, right) ->
-  t.assignment \= left, t[op.slice 0 2] void left, right
-
-t\++= = (, left, right) ->
-  assign = t.callExpression (member [left, \push]), [t.spreadElement right]
-  t.sequenceExpression [assign, left]
+  access = if it.lval then DECL else if it.value then REF else void
+  (t.identifier name) <<< key: (\Key == node-type it), scope: (name): access
 
 # Unfold
 
-t.sequence = -> t.sequenceExpression it
 nodes = null: h \Literal value: null
 function binary-node op, left, right
   type = if op == \= then \Assign else \Binary
@@ -185,7 +206,7 @@ function cache-index
       h \Sequence lines: [assign-cache, node <<< children: [base, key]]
     else node <<< children: assign-cache
 
-transform.Existence = (node, scope) -> not-null node.it
+transform.Existence = -> not-null it.it
 function exist name, type
   check = if type == \Call then is-function else not-null
   check name
@@ -210,7 +231,7 @@ function bind-slice slice, target, object
   slice <<< items: slice.items.map (item, index) ->
     base = if index then object else target
     key = item.val || item
-    key = set-type key, \Key if item.val && \Var == node-type key
+    key <<< h \Key name: key.value if item.val && \Var == node-type key
     pack-slice item, if key.items then bind-slice key, base, object
     else h \Index {base, key}
 function unfold-slice target, children: [object, [key: slice, ...tails]]
@@ -235,35 +256,51 @@ function transform-unfold
 
 # Infix
 
-function partial-operator node, scope
+function partial-operator node
   return if node.children.every -> it
   node.children = node.children.map -> it || temporary \it
-  set-type node, \Assign if /[^=]?=$/test node.op
+  node <<< constructor: display-name: \Assign if /[^=]?=$/test node.op
   h \Fun params: [] body: h \Block lines: [node]
 
-transform.Parens = (node, scope) -> node.it
-transform.Binary = (node, scope) ->
-  partial-operator node, scope or
-  transform-unfold transform-default node, scope
+transform.Parens = (.it)
 
-convert-infix = define build: \infixExpression params: infix-params
-function infix-params args, node => [node.op] ++ args ++ node<[logic soak]>
+function with-op
+  op = type: \Node children: [] value: it.op.replace /\.(.)\./ \$1
+  it <<< children: [op, ...it.children]
 
-t.BINARY_OPERATORS.forEach -> t[it] = t.binaryExpression
+transform.Unary = ->
+  if it.op == \new then it <<< q \New it.children.0, [] else it
+post-transform.Unary = with-op
+post-transform.Binary = with-op
+post-transform.Logical = with-op
+
+function rewrite-binary => rewrite-binary[it.op]? it or it
+rewrite-binary <<<
+  \|| : rewrite-logical, \&& : rewrite-logical,
+  \++ : rewrite-concat, \++= : rewrite-push
+  \<? : rewrite-compare, \>? : rewrite-compare
+function rewrite-logical => set-type it, \Logical
+
+transform.Binary = (node) ->
+  partial-operator node or transform-unfold transform-default rewrite-binary node
 t.LOGICAL_OPERATORS.forEach -> t[it] = t.logicalExpression
-t.NUMBER_BINARY_OPERATORS.concat ['' \+] .forEach -> t"#it=" = t.assignment
 
-t.infix-expression = (op, left, right, logic, soak) ->
-  op .= replace /\.(.)\./ \$1
-  switch
-  | right => t[op] op, left, right
-  | op == \new => t.newExpression left, []
-  | _  => t.unaryExpression op, left
+function rewrite-compare {op, children}
+  key = if op.0 == \< then \min else \max
+  base = h \Index base: (temporary \Math), key: h \Key name: key
+  h \Call {base, args: children}
 
-t\<? = make-helper <[Math min]>
-t\>? = make-helper <[Math max]>
-t\++ = make-helper [t.valueToNode []; \concat]
-t.object-import = make-helper [\Object \assign] false
+function rewrite-concat children: [source, value]
+  base = h \Index base: source, key: h \Key name: \concat
+  h \Call {base, args: [value]}
+
+function rewrite-push children: [source, value]
+  base = h \Index base: source, key: h \Key name: \push
+  h \Sequence lines: [h \Call {base, args: [h \Splat it: value]}; source]
+
+transform.Import = ->
+  base = h \Index base: (temporary \Object), key: h \Key name: \assign
+  h \Call {base, args: it.children}
 
 # Chain
 
@@ -281,7 +318,9 @@ function unfold-chain
   chain.head = chain.children.0
   result
 
-function bind-prop => if \~ == it.symbol?1 then h \Bind {it} else it
+function bind-prop
+  if \~ == it.symbol?1 then h \Bind target: null it
+  else it
 
 transform.Chain = ->
   return that if unfold-chain it
@@ -292,16 +331,17 @@ transform.Call = ->
   | it.base.value == \await => transform-await it
   | _ => it
 
-function member-params [base, key] => * base, key, !key.key
+t.member = (object, property) ->
+  t.member-expression object, property, !property.key
 
 # Cascade
 
-transform.Literal = (node, scope) ->
+transform.Literal = (node) ->
   return node if node.value != \..
   set-type node <<< value: \cascade$, \Var
 
 function index key, node => h \Index base: node, key: h \Literal value: key
-transform.Cascade = (node, scope) ->
+transform.Cascade = (node) ->
   target = binary-node \= (temporary \cascade$), node.children.0
   cascade = binary-node \=, (temporary \ref$),
     h \Arr items: [temporary \cascade$; target, node.children.1]
@@ -311,17 +351,15 @@ transform.Cascade = (node, scope) ->
 # Block
 
 function declare names
-  t.variableDeclaration \let names.map -> t.variableDeclarator t.id it
+  t.variableDeclaration \let names.map -> t.variable-declarator t.identifier it
 
+post-convert.Block = -> it <<< children: [unwrap-blocks it.children.0]
 function unwrap-blocks => it.reduce _, [] <| (body, node) ->
   body ++= if t.isBlock node then node.body else [node]
 
-function make-block [[body] scope]
-  * [unwrap-blocks body] scope
-
 function omit-declared => if it < DECL then it else void
 
-function declare-vars block, known={}
+function declare-vars block, known
   names = Object.keys block.scope .filter ->
     !(known[it].&.DECL) && (block.scope[it].&.DECL)
   block.body.unshift declare names if names.length > 0
@@ -335,7 +373,7 @@ function auto-return block, hushed
     block.lines = block.lines.slice 0 -1 .concat h \Return it: result
   block
 
-transform.Fun = (node, _) ->
+transform.Fun = (node) ->
   name = if node.name then temporary that else void
   node <<< children:
     name, node.params.map (arg, i) ->
@@ -343,33 +381,36 @@ transform.Fun = (node, _) ->
       else arg
     auto-return node.body, node.hushed
 
+post-convert.Await = -> it <<< scope: it.scope <<< '.await': REF
 function transform-await
   (set-type it, \Await) <<< children: [it.children.1.0]
 
-function make-function [[name, params, block]]
+t.function = (name, params, block) ->
   if params.length == 0 && block.scope.it .&. REF
-    params := [(t.id \it) <<< scope: it: DECL]
+    params := [(t.identifier \it) <<< scope: it: DECL]
     block.scope.it = DECL
   body = declare-vars block, Object.assign {} ...params.map (.scope)
   async = !!block.scope\.await
   block.scope\.await = DECL
-  * * name, params, body,, async
-    scope = map-values block.scope, omit-declared
+  type = \functionExpression
+  t[type] name, params, body,, async
+    ..scope = map-values block.scope, omit-declared
 
 # If
 
-function cache-that test, scope
-  if scope.that .&. REF
-    * t.assignment \= (t.id \that), test; scope <<< that: DECL
-  else [test, scope]
+function cache-that
+  transform binary-node \= (temporary \that), h \Node value: it
+function replace-test node, replace
+  [test, ...rest] = node.children
+  node <<< children: [t transform replace test; ...rest]
+function invert => h \Unary op: \! it: h \Node value: it
+function mark-declaration name, node
+  node <<< scope: node.scope <<< (name): DECL
 
-function make-if [[test, consequent, alternate] scope]
-  [test, scope] = cache-that test, scope
-  * [test, consequent, alternate] scope
-
-function if-params args, node
-  args.0 = t.unaryExpression \! args.0 if node.un
-  args
+post-convert.If = ->
+  | it.un => replace-test it, invert
+  | it.scope.that => mark-declaration \that replace-test it, cache-that
+  | _ => it
 
 # Switch
 
@@ -389,25 +430,27 @@ transform.Switch = (node) ->
 
 # Try
 
-function try-params [block, recovery, finalizer]
+transform.Throw = -> it.children.0 ||= nodes.null; it
+t.try = (block, recovery, finalizer) ->
   {body: [expression: left: param; ...body]}? = recovery
-  handler = t.catchClause param || (t.id \e), t.blockStatement body || []
-  * block, handler, finalizer
+  handler = if recovery || !finalizer
+    t.catch-clause param || (t.identifier \e), t.block-statement body || []
+  else void
+  t.try-statement block, handler, finalizer
 
 #Child types
 
-function lval
+t.lval = ->
   return it if !it || t.isLVal it
-  it.elements ?.= map lval
+  it.elements ?.= map t.lval
   it.properties ?.= map ->
-    it <<< value: (lval it.value), type: it.type.replace \Spread \Rest
+    it <<< value: (t.lval it.value), type: it.type.replace \Spread \Rest
   {} <<< it <<< type: it.type
   .replace \Expression \Pattern .replace \Spread \Rest
 
-function derive rewrite => -> (rewrite it) <<< {it.loc, it.scope}
-
+function copy-loc derive => -> it && (derive it) <<< loc: it.loc
 function anonymous => t.isFunction it and !it.id
-statement = derive ->
+t.statement = copy-loc ->
   | !anonymous it and t.toStatement it, true => that
   | _ => t.expressionStatement it # muse be expression
 
@@ -415,10 +458,10 @@ function wrap-expression node
   t.doExpression if node.type == \BlockStatement then node
   else t.blockStatement [node]
 
-expr = derive (node) ->
+t.expression = copy-loc (node) ->
   | t.isExpression node or t.isSpreadElement node => node
   | node.expression => that
-  | node.body?length == 1 => expr node.body.0
+  | node.body?length == 1 => t.expression node.body.0
   | _ => wrap-expression node
 
 literals = <[this arguments eval]>reduce (data, name) ->
@@ -426,74 +469,58 @@ literals = <[this arguments eval]>reduce (data, name) ->
 , void: t.unaryExpression \void t.valueToNode 8
 literals\* = literals.void
 
-string-literal = derive ->
-  | it.type == \StringLiteral => it
-  | _ => t.stringLiteral it.name
-
-property = derive ->
+function convert-property => switch
   | it.type == \ObjectProperty => it
-  | it.type == \MemberExpression => t.objectProperty it.property, it
+  | it.type == \MemberExpression => t.property it.property, it
   | t.isSpreadElement it => it <<< type: \SpreadProperty
-  | it.type == \AssignmentExpression
-    t.objectProperty it.left, it <<< type: \AssignmentPattern, false true
-  | _ => t.objectProperty ...property-params [it, it]
+  | _ => t.property it.left, it <<< type: \AssignmentPattern
 
-function property-params [key, value]
-  * key, value, computed = !key.key, shorthand = key == value
+t.object = (properties) ->
+  t.object-expression properties.map convert-property
+
+t.property = (key, value) ->
+  t.object-property key, value, !key.key, key.name == value.name
 
 t <<<
-  unk: -> throw "not implemented: #{node-type it}"
+  unk: -> throw message: "not implemented: #{node-type it}"
 
+  Node: (.value)
   Literal: -> literals[it.value] or t.valueToNode eval it.value
   Key: convert-variable, Var: convert-variable
 
-  Arr: define build: \arrayExpression
-  Obj: define build: \objectExpression types: [property]
-  Prop: define build: \objectProperty params: property-params
+  Arr: define \ArrayExpression \expression
+  Obj: define \object
+  Prop: define \property \expression \expression
 
-  Module: module-io
-  Bind: define build: \bindExpression params: -> [null, it.0]
-  Index: define build: \memberExpression params: member-params
-  Call: define build: \callExpression
-  New: define build: \newExpression
-  Unary: convert-infix, Binary: convert-infix, Assign: convert-infix
-  Import: convert-infix
-  Splat: define build: \spreadElement
+  Import: define \ImportDeclaration
+  Export: define \export
+  Specifier: define \specifier
 
-  Block: define do
-    build: \blockStatement types: [statement] input: ->
-      if it == TOP then it else {}
-    output: make-block
-  Sequence: define build: \sequence
+  Bind: define \BindExpression
+  Index: define \member \expression \expression
+  Call: define \CallExpression \expression \expression
+  New: define \NewExpression \expression
 
-  Return: define build: \returnStatement
-  Await: define build: \awaitExpression input: -> it <<< \.await : REF
-  Fun: define do
-    build: \functionExpression types: [, lval, statement]
-    input: (, node) -> {}
-    output: make-function
+  Unary: define \UnaryExpression \pass \expression
+  Logical: define \LogicalExpression \pass \expression \expression
+  Binary: define \BinaryExpression \pass \expression \expression
+  Assign: define \AssignmentExpression \pass \lval \expression
+  Splat: define \SpreadElement \expression
 
-  Conditional: define build: \conditionalExpression
-  If: define build: \ifStatement types: [void statement, statement] \
-    output: make-if, params: if-params
-  Throw: define build: \throwStatement params: -> [it.0 || t.nullLiteral!]
-  Try: define build: \tryStatement types: [pass, pass, pass] params: try-params
+  Block: define \BlockStatement \statement
+  Sequence: define \SequenceExpression
 
-function member
-  it.0 = if \object == typeof it.0 then it.0 else t.id it.0
-  it.reduce (a, b) -> t.memberExpression a, t.id b
+  Return: define \ReturnStatement \expression
+  Await: define \AwaitExpression \expression
+  Fun: define \function \pass \lval
 
-function make-helper names, associative=true
-  fn = member names
-  (, ...args) ->
-    | args.0.callee == fn
-      {} <<< args.0 <<< arguments: args.0.arguments ++ args.1
-    | args.1.callee == fn && associative
-      {} <<< args.1 <<< arguments: [args.0, ...args.1.arguments]
-    | _ => t.callExpression fn, args
+  Conditional: define \ConditionalExpression '' '' ''
+  If: define \IfStatement \expression \statement \statement
+  Throw: define \ThrowStatement \expression
+  Try: define \try
 
 function convert root
-  program = declare-vars t root, TOP
+  program = convert-module root
     ..type = \Program
   t.file program, [] []
     ..loc = program.loc
