@@ -268,8 +268,9 @@ function with-op
   op = type: \Node children: [] value: it.op.replace /\.(.)\./ \$1
   it <<< children: [op, ...it.children]
 
+rewrite-unary = new: \New do: \Call
 transform.Unary = ->
-  if it.op == \new then it <<< q \New it.children.0, [] else it
+  if rewrite-unary[it.op] then it <<< q that, it.children.0, [] else it
 post-transform.Unary = with-op
 post-transform.Binary = with-op
 post-transform.Logical = with-op

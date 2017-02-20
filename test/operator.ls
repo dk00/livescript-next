@@ -26,6 +26,10 @@ function main t
   expecetd = a: 1 b: 2
   t.deep-equal result, expecetd, 'copy object properties'
 
+  expected = message: 'unary do: call function without arguments'
+  actual = do (a) -> a || expected
+  t.equal actual, expected, expected.message
+
   add-left = (+ 1)
   add-right = (1 +)
   actual = [add-left 0; add-right 0]
