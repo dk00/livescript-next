@@ -148,10 +148,47 @@ function rewrite-assign => switch
     it <<< op: \= children: [it.children.0, that it]
   | _ => it
 
+function pack-pattern active, name, pattern
+  if active && !pattern.key then h \Prop key: (h \Key {name}), val: pattern
+  else pattern
+
+function extract-pattern
+  element = if it.op then it[it.children.0] else it
+  element.val || element
+
+function replace-pattern node, pattern
+  if node.op then node <<< (node.children.0): pattern else pattern
+
+function split-named
+  [items, base] = [it.items, it <<< items: []]
+  items.reduce _, [base] <| (parts, element, index) ->
+    pattern = extract-pattern element
+    parts.push h \Obj items: [] unless last parts .items
+    last parts .items.push pack-pattern parts.length-1 index,
+    if pattern.items && pattern.name
+      parts.push binary-node \= pattern, h \Var value: that
+      replace-pattern element, h \Key name: that
+    else element
+    parts
+
+function assign-all parts, value
+  [ref, cache] = cache-ref value, \ref$
+  items = parts.map (node, index) ->
+    value = if index then ref else cache
+    if node.op then node else binary-node \= node, value
+  h \Sequence items: items.concat ref
+
+function split-destructing node
+  {children: [target, value]} = node
+  return node if node.lval || !target.items
+  parts = split-named target
+  if parts.length < 2 then node else {} <<< node <<< assign-all parts, value
+
 NONE = {+void, +null}
 transform.Assign = (node) ->
   | NONE[node.children.0.value] => node.children.1
-  | _ => rewrite-assign strip-assign set-lval transform-unfold node
+  | _
+    rewrite-assign split-destructing strip-assign set-lval transform-unfold node
 post-transform.Assign = with-op
 
 function transform-lval index=0 => (node) ->

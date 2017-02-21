@@ -75,6 +75,16 @@ function main t
   {object-def=1} = {}
   t.equal object-def, 1 'destructure object with default values'
 
+  expected = message: 'named destructing'
+  {{message}: actual} = actual: expected
+  t.equal actual, expected, message
+
+  message = 'named destructing with default values'
+  expected = [message, {message}, message]
+  [[, {message}: p]: q=expected, [r]: s=expected] = []
+  actual = [r, p, message]
+  t.deep-equal actual, expected, message
+
   a = b: 0 c: 1 d: 2
   expected = b: 0 c: 1 e: 3
   actual = e: 3
