@@ -141,10 +141,10 @@ function set-lval
   it.children = [mark-lval it.children.0; it.children.1] if it.op == \=
   it
 
-function strip-assign => it <<< op: it.op?replace \: ''
+function strip-assign => it <<< op: it.op.replace \: ''
 function rewrite-assign => switch
   | rewrite-binary[it.op] => that it
-  | rewrite-binary[it.op?slice 0 -1]
+  | rewrite-binary[it.op.slice 0 -1]
     it <<< op: \= children: [it.children.0, that it]
   | _ => it
 
@@ -187,8 +187,9 @@ function split-destructing node
 NONE = {+void, +null}
 transform.Assign = (node) ->
   | NONE[node.children.0.value] => node.children.1
-  | _
-    rewrite-assign split-destructing strip-assign set-lval transform-unfold node
+  | node.logic => unfold.logic node
+  | \Existence == node-type node.children.0 => unfold.soak node
+  | _ => rewrite-assign split-destructing strip-assign set-lval node
 post-transform.Assign = with-op
 
 function transform-lval index=0 => (node) ->
@@ -199,7 +200,6 @@ function transform-lval index=0 => (node) ->
 <[Arr Splat Existence]>forEach -> transform[it] = transform-lval!
 
 function transform-default node
-  return node unless node.lval
   next = set-type _, \Assign <| transform-lval! node
   next <<< op: \=
 transform.Prop = transform-lval 1
@@ -224,7 +224,8 @@ function is-function
 
 no-cache = {+Var, +Key}
 function temporary => h \Var value: it
-function cache-ref node, id=\that
+function cache-ref value, id=\that
+  node = if value.it then transform value else value
   * name = if no-cache[node-type node] then node else temporary id
     if name == node then node else binary-node \= name, node
 
@@ -243,6 +244,11 @@ function cache-index
       h \Sequence lines: [assign-cache, node <<< children: [base, key]]
     else node <<< children: assign-cache
 
+function cache-child node, index
+  assign-cache = if should-bind node then cache-index else cache-ref
+  [node.children[index], target] = assign-cache node.children[index]
+  [target, node]
+
 transform.Existence = -> not-null it.it
 function exist name, type
   check = if type == \Call then is-function else not-null
@@ -253,11 +259,7 @@ function conditional test, next, other
     test: exist test, next.tails?0 && node-type next.tails.0
     then: next, else: other || h \Literal value: \void
 
-function logical op, left,, right => h \Binary {op, left, right}
-
 should-bind = (.logic || it.tails)
-take-left = (.children.0)
-take-right = (.children.1)
 function strip-logic => it <<< logic: void
 function unwrap-left => it <<< children: [it.children.0.it, it.children.1]
 function strip-soak => it.tails.0.soak = void; it
@@ -275,26 +277,28 @@ function unfold-slice target, children: [object, [key: slice, ...tails]]
   head = bind-slice slice, target, object
   h \Chain {head, tails}
 
+function unfold index, wrap => -> wrap ...cache-child it, index
+unfold <<<
+  existance: unfold 0 (target, cached) ->
+    conditional target, ...cached.children
+  logic: unfold 0 (target, cached) ->
+    binary-node cached.logic, target, strip-logic cached
+  soak: unfold 1 (target, cached) -> conditional target, unwrap-left cached
+
 function transform-unfold
   items = it.children
-  tail = items.1.0 || {}
-  settings =
-    | \Existence == node-type items.0 => * unwrap-left,,, 1
-    | it.op == \? => * take-left,, take-right
-    | it.logic => * take-left, t[that] && logical.bind void that; strip-logic
+  tail = items.1.0
+  [select, unfold=conditional] =
     | tail.soak => [strip-soak]
     | tail.symbol == \.= => * strip-symbol, binary-node.bind void \=
-    | tail.key?items => * pass, unfold-slice
-  return it unless [select, unfold=conditional, alt, replace=0]? = settings
+    | _ => * pass, unfold-slice
 
-  assign-cache = if should-bind it then cache-index else cache-ref
-  [items[replace], target] = assign-cache items[replace]
-  unfold target, (select it), alt? it
+  [target, node] = cache-child it, 0
+  unfold target, select node
 
 # Infix
 
 function partial-operator node
-  return if node.children.every -> it
   node.children = node.children.map -> it || temporary \it
   node <<< constructor: display-name: \Assign if /[^=]?=$/test node.op
   h \Fun params: [] body: h \Block lines: [node]
@@ -312,33 +316,32 @@ post-transform.Unary = with-op
 post-transform.Binary = with-op
 post-transform.Logical = with-op
 
-function rewrite-binary => rewrite-binary[it.op]? it or it
-rewrite-binary <<<
+rewrite-binary =
   \|| : rewrite-logical, \&& : rewrite-logical,
   \++ : rewrite-concat, \++= : rewrite-push
   \<? : rewrite-compare, \>? : rewrite-compare
 function rewrite-logical => set-type it, \Logical
 
 transform.Binary = (node) ->
-  partial-operator node or transform-unfold transform-default rewrite-binary node
-t.LOGICAL_OPERATORS.forEach -> t[it] = t.logicalExpression
+  | node.children.some (-> !it) => partial-operator node
+  | rewrite-binary[node.op] => that node
+  | node.lval => transform-default node
+  | node.op == \? => unfold.existance node
+  | _ => node
+
+function helper base, name, args
+  h \Call {base: (h \Index {base, key: h \Key {name}}), args}
 
 function rewrite-compare {op, children}
   key = if op.0 == \< then \min else \max
-  base = h \Index base: (temporary \Math), key: h \Key name: key
-  h \Call {base, args: children}
+  helper (temporary \Math), key, children
 
 function rewrite-concat children: [source, value]
-  base = h \Index base: source, key: h \Key name: \concat
-  h \Call {base, args: [value]}
-
+  helper source, \concat [value]
 function rewrite-push children: [source, value]
-  base = h \Index base: source, key: h \Key name: \push
-  h \Sequence lines: [h \Call {base, args: [h \Splat it: value]}; source]
+  h \Sequence lines: [helper source, \push [h \Splat it: value]; source]
 
-transform.Import = ->
-  base = h \Index base: (temporary \Object), key: h \Key name: \assign
-  h \Call {base, args: it.children}
+transform.Import = -> helper (temporary \Object), \assign it.children
 
 # Chain
 
