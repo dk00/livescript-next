@@ -1,3 +1,5 @@
+import \../src/compile : compile
+
 a = 1
 b = a
 function main t
@@ -80,10 +82,15 @@ function main t
   t.equal actual, expected, message
 
   message = 'named destructing with default values'
-  expected = [message, {message}, message]
-  [[, {message}: p]: q=expected, [r]: s=expected] = []
-  actual = [r, p, message]
-  t.deep-equal actual, expected, message
+  source = '[[, {message}: p]: q=expected, [r]: s=expected] = []'
+  actual = compile source .code
+  expected = '''let q, ref$, p, message, s, r;
+  [q = expected] = ref$ = [], ([, p] = q, ({
+    message
+  } = p), q), ({
+    1: s = expected
+  } = ref$), [r] = s, ref$;'''
+  t.equal actual, expected, message
 
   a = b: 0 c: 1 d: 2
   expected = b: 0 c: 1 e: 3
