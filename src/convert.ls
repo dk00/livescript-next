@@ -174,9 +174,9 @@ function split-named
 function assign-all parts, value
   [ref, cache] = cache-ref value, \ref$
   items = parts.map (node, index) ->
-    value = if index then ref else cache
+    value = if index > 1 then ref else cache
     if node.op then node else binary-node \= node, value
-  h \Sequence items: items.concat ref
+  h \Block lines: items.concat ref
 
 function split-destructing node
   {children: [target, value]} = node
@@ -414,13 +414,22 @@ function auto-return block, hushed
     block.lines = block.lines.slice 0 -1 .concat h \Return it: result
   block
 
+function unfold-params
+  items = it.map (arg, i) ->
+    pattern = extract-pattern arg
+    mark-lval switch
+      | pattern.name => replace-pattern arg, temporary that
+      | \Literal == node-type pattern => temporary "arg#{i}$"
+      | _ => arg
+  [, ...parts] = split-named h \Arr items: it
+  * items, if parts.length > 0 then [assign-all parts, h \Arr {items}] else []
+
 transform.Fun = (node) ->
   name = if node.name then temporary that else void
+  [params, lines] = unfold-params node.params
   node <<< children:
-    (h \Node value: node), name, node.params.map (arg, i) ->
-      mark-lval if \Literal == node-type arg then h \Var value: "arg#{i}$"
-      else arg
-    auto-return node.body, node.hushed
+    (h \Node value: node), name, params
+    auto-return (node.body <<< lines: lines ++ node.body.lines), node.hushed
 
 post-convert.Await = -> it <<< scope: it.scope <<< '.await': REF
 function transform-await

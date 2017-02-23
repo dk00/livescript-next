@@ -20,6 +20,14 @@ function main t
   get-rest = (...r) -> r
   t.deep-equal (get-rest 0 1), [0 1] 'pack rest parameters'
 
+  message = 'named parameter destructuring'
+  data = [message]
+  fn = ([a]: b, c) -> [a, b, c]
+  expected = [message, [message], message]
+  actual = fn [message] message
+  t.deep-equal actual, expected, message
+  t.equal fn.length, 2 'have same number of parameters with named destructuring'
+
   expected = @
   fn = ~> @
   actual = fn!
