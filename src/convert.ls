@@ -8,7 +8,7 @@ function L
 function pass => it
 node-type = (.constructor.display-name)
 
-attr-keys = {+op, +name, +value}
+attr-keys = {+op, +name, +value, +bound}
 function h display-name, props
   children = Object.keys props .filter -> !attr-keys[it]
   {constructor: {display-name} children} <<< props
@@ -135,7 +135,9 @@ transform.Obj = ->
 
 # Assign
 
-function mark-lval => if it.value != \void then it <<< lval: true else null
+function mark-lval
+  if it.value != \void then {+lval, it.constructor, it.children} <<< it
+  else null
 
 function set-lval
   it.children = [mark-lval it.children.0; it.children.1] if it.op == \=
@@ -211,7 +213,10 @@ function convert-variable
 
 # Unfold
 
-nodes = null: h \Literal value: null
+nodes =
+  null: h \Literal value: null
+  void: h \Literal value: void
+  1: h \Literal value: 1
 function binary-node op, left, right
   type = if op == \= then \Assign else \Binary
   h type, {op, left, right}
@@ -222,11 +227,12 @@ function is-function
     h \Unary op: \typeof it: it
     h \Literal value: \'function'
 
-no-cache = {+Var, +Key}
+no-cache = {+Var, +Key, +Literal}
+function should-cache => !no-cache[node-type it] || it.value == \..
 function temporary => h \Var value: it
 function cache-ref value, id=\that
   node = if value.it then transform value else value
-  * name = if no-cache[node-type node] then node else temporary id
+  * name = if should-cache node then temporary id else node
     if name == node then node else binary-node \= name, node
 
 function merge-assignment
@@ -391,8 +397,8 @@ transform.Cascade = (node) ->
 
 # Block
 
-function declare names
-  t.variableDeclaration \let names.map -> t.variable-declarator t.identifier it
+t.declare = (names) ->
+  t.variable-declaration \let names.map -> t.variable-declarator it
 
 post-convert.Block = -> it <<< children: [unwrap-blocks it.children.0]
 function unwrap-blocks => it.reduce _, [] <| (body, node) ->
@@ -401,18 +407,21 @@ function unwrap-blocks => it.reduce _, [] <| (body, node) ->
 function omit-declared => if it < DECL then it else void
 
 function declare-vars block, known
-  names = Object.keys block.scope .filter ->
-    !(known[it].&.DECL) && (block.scope[it].&.DECL)
-  block.body.unshift declare names if names.length > 0
+  names = if block.scope then Object.keys that .filter ->
+    !(known[it].&.DECL) && (that[it].&.DECL)
+  else []
+  block.body.unshift t q \Vars names.map temporary if names.length > 0
   block
 
 # Function
 
-function auto-return block, hushed
+function auto-return block, {bound, hushed}
   result = last block.lines
-  if !hushed && result && \Return != node-type result
-    block.lines = block.lines.slice 0 -1 .concat h \Return it: result
-  block
+  switch
+  | bound && block.lines.length == 1 => result
+  | !hushed && result && \Return != node-type result
+    block <<< lines: block.lines.slice 0 -1 .concat h \Return it: result
+  | _ => block
 
 function unfold-params
   items = it.map (arg, i) ->
@@ -429,20 +438,23 @@ transform.Fun = (node) ->
   [params, lines] = unfold-params node.params
   node <<< children:
     (h \Node value: node), name, params
-    auto-return (node.body <<< lines: lines ++ node.body.lines), node.hushed
+    auto-return (node.body <<< lines: lines ++ node.body.lines), node
 
 post-convert.Await = -> it <<< scope: it.scope <<< '.await': REF
 function transform-await
   (set-type it, \Await) <<< children: [it.children.1.0]
 
 t.function = ({bound} name, params, block) ->
-  if params.length == 0 && block.scope.it .&. REF
+  nested = block.scope || {}
+  if params.length == 0 && nested.it .&. REF
     params := [(t.identifier \it) <<< scope: it: DECL]
   body = declare-vars block, Object.assign {} ...params.map (.scope)
-  async = !!block.scope\.await
-  scope = map-values (block.scope <<< \.await : DECL, it: DECL), omit-declared
+  async = !!nested\.await
+  scope = map-values (nested <<< \.await : DECL, it: DECL), omit-declared
 
-  result = if bound then t.arrow-function-expression params, body, async
+  result = if bound
+    (t.arrow-function-expression params, body, async) <<<
+      expression: t.is-expression body
   else t.function-expression name, params, body,, async
   result <<< {scope}
 
@@ -487,6 +499,33 @@ t.try = (block, recovery, finalizer) ->
     t.catch-clause param || (t.identifier \e), t.block-statement body || []
   else void
   t.try-statement block, handler, finalizer
+
+# For
+
+function range origin, end, inclusive
+  diff = if origin then binary-node \- end, origin else end
+  length = if inclusive then binary-node \+ diff, h \Literal value: 1
+  else diff
+  options = h \Obj items: [h \Prop key: (h \Key name: \length), val: length]
+  helper (temporary \Array), \from [options]
+
+function loop-result block, init, name
+  value = binary-node \+ init, (temporary \it)
+  body = block || h \Block lines: [name]
+  if init
+    body.lines = if block then [binary-node \= name, value] ++ body.lines
+    else [value]
+  body
+
+function not-zero => it && it.value != \0 && it.head?value != 0
+transform.For = ({index=\i op, children}) ->
+  [item, source, start, end,, block] = children
+  [init, origin] = if not-zero start then cache-ref start, \init$ else []
+  name = temporary index
+  params = if init then [nodes.void, temporary \it] else [nodes.void, name]
+  body = loop-result block, init, name
+  items = range origin, end, op == \to
+  helper items, \map [h \Fun {+bound, params, body}]
 
 #Child types
 
@@ -557,6 +596,7 @@ t <<<
   Assign: define \AssignmentExpression \pass \lval \expression
   Splat: define \SpreadElement \expression
 
+  Vars: define \declare \pass
   Block: define \BlockStatement \statement
   Sequence: define \SequenceExpression
 

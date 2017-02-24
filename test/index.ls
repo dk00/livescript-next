@@ -1,5 +1,6 @@
 import tape: test, \./module : module$, \./function : func,
   \./assign : assign, \./literal : literal, \./if : if$,
+  \./loop : loop$
   \./operator : operator, \./chain : chain, \./switch : switch$
   \./try : try$
 
@@ -10,5 +11,6 @@ test literal, \Literal
 test if$, \If
 test operator, \Operator
 test chain, \Chain
+test loop$, \Loop
 test switch$, \Switch
 test try$, \Try
