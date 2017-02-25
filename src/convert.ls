@@ -521,8 +521,8 @@ function loop-call [type, params, body, ...init]
 function assign-property base, items: [key, value]
   binary-node \= (h \Index {base, key}), value
 function select-comprehension object, params, body
+  base = temporary \$res
   loop-call unless object then [\map params, body] else
-    base = temporary \$res
     body.lines = replace-last body.lines, ->
       h \Sequence items: [assign-property base, it; base]
     * \reduce [base] ++ params, body, h \Obj items: []
