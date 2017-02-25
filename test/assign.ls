@@ -85,6 +85,11 @@ function main t
   actual = [r, p, message]
   t.deep-equal actual, expected, message
 
+  [[p]: q,, {r}: s] = [[v=[1]] 0 r: v]
+  actual = [p, q, r, s]
+  expcted = [v, [v] v, r: v]
+  t.deep-equal actual, expcted, 'named destructing with skipped values'
+
   a = b: 0 c: 1 d: 2
   expected = b: 0 c: 1 e: 3
   actual = e: 3

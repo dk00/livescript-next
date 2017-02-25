@@ -46,6 +46,8 @@ t.objectProperty = (key, value, computed, shorthand) ->
   {type: \ObjectProperty key, value, computed, shorthand}
 
 function last => it[it.length-1]
+function replace-last items, fn
+  items.slice 0 -1 .concat fn items[items.length-1]
 function list-apply whatever, fn => whatever.map? fn or fn whatever
 
 function merge scope, nested={}
@@ -156,7 +158,8 @@ function pack-pattern active, name, pattern
 
 function extract-pattern
   element = if it.op then it[it.children.0] else it
-  element.val || element
+  pattern = element.val || element
+  pattern.items && pattern.name && pattern
 
 function replace-pattern node, pattern
   if node.op then node <<< (node.children.0): pattern else pattern
@@ -164,13 +167,14 @@ function replace-pattern node, pattern
 function split-named
   [items, base] = [it.items, it <<< items: []]
   items.reduce _, [base] <| (parts, element, index) ->
-    pattern = extract-pattern element
-    parts.push h \Obj items: [] unless last parts .items
-    last parts .items.push pack-pattern parts.length-1 index,
-    if pattern.items && pattern.name
-      parts.push binary-node \= pattern, h \Var value: that
-      replace-pattern element, h \Key name: that
+    skip = parts.length > 1 && \Literal == node-type element
+    pattern = !skip && extract-pattern element
+    ref = if pattern then replace-pattern element, h \Key {pattern.name}
     else element
+    unless skip
+      parts.push h \Obj items: [] unless last parts .items
+      last parts .items.push pack-pattern parts.length-1 index, ref
+    parts.push binary-node \= pattern, h \Var value: pattern.name if pattern
     parts
 
 function assign-all parts, value
@@ -178,7 +182,7 @@ function assign-all parts, value
   items = parts.map (node, index) ->
     value = if index > 1 then ref else cache
     if node.op then node else binary-node \= node, value
-  h \Block lines: items.concat ref
+  h \Block lines: items.concat if parts.length > 1 then ref else []
 
 function split-destructing node
   {children: [target, value]} = node
@@ -415,30 +419,27 @@ function declare-vars block, known
 
 # Function
 
-function auto-return block, {bound, hushed}
-  result = last block.lines
+function auto-return {body, bound, hushed}
+  result = last body.lines
   switch
-  | bound && block.lines.length == 1 => result
+  | bound && body.lines.length == 1 => result
   | !hushed && result && \Return != node-type result
-    block <<< lines: block.lines.slice 0 -1 .concat h \Return it: result
-  | _ => block
+    body <<< lines: body.lines.slice 0 -1 .concat h \Return it: result
+  | _ => body
 
 function unfold-params
-  items = it.map (arg, i) ->
-    pattern = extract-pattern arg
-    mark-lval switch
-      | pattern.name => replace-pattern arg, temporary that
-      | \Literal == node-type pattern => temporary "arg#{i}$"
-      | _ => arg
-  [, ...parts] = split-named h \Arr items: it
-  * items, if parts.length > 0 then [assign-all parts, h \Arr {items}] else []
+  [{items} ...parts] = split-named h \Arr items: it
+  params = it.map (, i) ->
+    mark-lval if items[i] && \Literal != node-type items[i] then items[i]
+    else temporary "arg#{i}$"
+  * params, [assign-all parts, h \Arr items: params]
 
 transform.Fun = (node) ->
   name = if node.name then temporary that else void
-  [params, lines] = unfold-params node.params
-  node <<< children:
-    (h \Node value: node), name, params
-    auto-return (node.body <<< lines: lines ++ node.body.lines), node
+  [params, destructure] = unfold-params node.params
+  block = auto-return node
+  block.lines = destructure ++ block.lines
+  node <<< children: [h \Node value: node; name, params, block]
 
 post-convert.Await = -> it <<< scope: it.scope <<< '.await': REF
 function transform-await
@@ -509,23 +510,48 @@ function range origin, end, inclusive
   options = h \Obj items: [h \Prop key: (h \Key name: \length), val: length]
   helper (temporary \Array), \from [options]
 
-function loop-result block, init, name
+function loop-result block, init, name, index
   value = binary-node \+ init, (temporary \it)
-  body = block || h \Block lines: [name]
-  if init
-    body.lines = if block then [binary-node \= name, value] ++ body.lines
-    else [value]
+  body = block || h \Block lines: if init then [value] else [name]
+  body.lines.unshift binary-node \= name, value if block && index && init
   body
 
+function loop-call [type, params, body, ...init]
+  * type, [h \Fun {+bound, params, body}; ...init]
+function assign-property base, items: [key, value]
+  binary-node \= (h \Index {base, key}), value
+function select-comprehension object, params, body
+  loop-call unless object then [\map params, body] else
+    base = temporary \$res
+    body.lines = replace-last body.lines, ->
+      h \Sequence items: [assign-property base, it; base]
+    * \reduce [base] ++ params, body, h \Obj items: []
+
+function object-items source, name, item
+  [method, params] = if item then [\entries [h \Arr items: [name, item]]]
+  else [\keys [name]]
+  * helper (temporary \Object), method, [source]; params
+
+function iterate object, left, source, block
+  res = temporary \res$
+  init = binary-node \= res, h (if object then \Obj else \Arr), items: []
+  item = h \Vars vars: [left]
+  body = if object then assign-property res, block.lines.0
+  else helper res, \push [block]
+  h \Block lines: [init, h \ForOf {item, source, body}; res]
+
 function not-zero => it && it.value != \0 && it.head?value != 0
-transform.For = ({index=\i op, children}) ->
+transform.For = ({index, op, object, obj-comp, children}) ->
   [item, source, start, end,, block] = children
   [init, origin] = if not-zero start then cache-ref start, \init$ else []
-  name = temporary index
-  params = if init then [nodes.void, temporary \it] else [nodes.void, name]
-  body = loop-result block, init, name
-  items = range origin, end, op == \to
-  helper items, \map [h \Fun {+bound, params, body}]
+  name = temporary index || \i
+  [items, params] = if object then object-items source, name, item
+  else
+    * range origin, end, op == \to
+      [nodes.void, if init then temporary \it else name]
+  body = loop-result block, init, name, index
+  if !object && source then iterate obj-comp, item, source, body
+  else helper items, ...select-comprehension obj-comp, params, body
 
 #Child types
 
@@ -608,6 +634,7 @@ t <<<
   If: define \IfStatement \expression \statement \statement
   Throw: define \ThrowStatement \expression
   Try: define \try
+  ForOf: define \ForOfStatement \pass \expression \statement
 
 function convert root
   program = convert-module root

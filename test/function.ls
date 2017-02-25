@@ -28,6 +28,9 @@ function main t
   t.deep-equal actual, expected, message
   t.equal fn.length, 2 'have same number of parameters with named destructuring'
 
+  fn = ([a, b]: arg=[]) ->
+  t.equal fn!, void 'handle auto returning before destructuring parameters'
+
   expected = @
   fn = ~> @
   actual = fn!

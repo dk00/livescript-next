@@ -1,3 +1,4 @@
+Object.entries ||= require \object.entries
 require! tape: test, \../lib/parse : {default: compiled-parse}
 delete require.extensions\.ls
 require! \babel-register : register

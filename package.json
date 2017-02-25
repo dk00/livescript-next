@@ -1,11 +1,14 @@
 {
   "name": "livescript-next",
   "description": "Enable latest ES features for LiveScript",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "main": "lib/index.js",
   "module": "es/index.js",
   "browser": "dist/index.js",
   "jsnext:main": "es/index.js",
+  "repository": "dk00/livescript-next",
+  "bugs": "https://github.com/dk00/livescript-next/issues",
+  "homepage": "https://github.com/dk00/livescript-next#readme",
   "files": [
     "dist",
     "es",
@@ -28,6 +31,7 @@
     "gulp": "",
     "livescript": "",
     "nyc": "",
+    "object.entries": "",
     "rollup": "",
     "rollup-plugin-babel": "",
     "rollup-plugin-node-resolve": "",
