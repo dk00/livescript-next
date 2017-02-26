@@ -26,6 +26,19 @@ function main t
   expecetd = a: 1 b: 2
   t.deep-equal result, expecetd, 'copy object properties'
 
+  source = a: void
+  t.ok \a of source, 'of operator'
+
+  source = [0 1 2]
+  t.ok 1 in source, 'in operator'
+
+  a = (q) -> q.0
+  b = (q) -> q.wrap
+  c = (q) -> q.1
+  fn = a . b >> c
+  actual = fn wrap: [0 [expected = 'compose functions .']]
+  t.equal actual, expected, expected
+
   expected = message: 'unary do: call function without arguments'
   actual = do (a) -> a || expected
   t.equal actual, expected, expected.message

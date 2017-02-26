@@ -74,6 +74,10 @@ function main t
   actual = a![\b, key, c: (key), d: {e, f: [\g, \h] i: j}]
   t.deep-equal actual, expected, message
 
+  q = 3
+  actual = [0 1 2 3 4 5][1 til q]
+  t.deep-equal actual, [1 2] 'array range slicing'
+
   t.ok
     .. .., 'cascade: 1 level'
 

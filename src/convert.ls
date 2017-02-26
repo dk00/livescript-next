@@ -296,8 +296,7 @@ unfold <<<
   soak: unfold 1 (target, cached) -> conditional target, unwrap-left cached
 
 function transform-unfold
-  items = it.children
-  tail = items.1.0
+  tail = it.children.1.0
   [select, unfold=conditional] =
     | tail.soak => [strip-soak]
     | tail.symbol == \.= => * strip-symbol, binary-node.bind void \=
@@ -314,10 +313,10 @@ function partial-operator node
   h \Fun params: [] body: h \Block lines: [node]
 
 transform.Parens = (.it)
-
+map-op = of: \in
 function with-op
-  op = type: \Node children: [] value: it.op.replace /\.(.)\./ \$1
-  it <<< children: [op, ...it.children]
+  op = (map-op[it.op] || it.op)replace /\.(.)\./ \$1
+  it <<< children: [type: \Node children: [] value: op, ...it.children]
 
 rewrite-unary = new: \New do: \Call
 transform.Unary = ->
@@ -327,16 +326,32 @@ post-transform.Binary = with-op
 post-transform.Logical = with-op
 
 rewrite-binary =
-  \|| : rewrite-logical, \&& : rewrite-logical,
-  \++ : rewrite-concat, \++= : rewrite-push
+  \? : unfold.existance, \|| : rewrite-logical, \&& : rewrite-logical
+  \<< : compose, \++ : rewrite-concat, \++= : rewrite-push
   \<? : rewrite-compare, \>? : rewrite-compare
 function rewrite-logical => set-type it, \Logical
 
+function compose
+  call = it.children.reduce-right (arg, base) -> h \Call {base, args: [arg]}
+  , h \Splat it: h \Literal value: \arguments
+  h \Fun params: [] body: h \Block lines: [call]
+function reverse-compose
+  if it.op == \>> then it <<< op: \<< children: <[second first]> else it
+
+function concat a, b => a ++ b
+function combine-binary op, node
+  if node.op != op && op != node-type node then [node]
+  else
+    node.children.map -> combine-binary op, reverse-compose node[it] || it
+    .reduce concat
+combinable = {+\<<, +\++, +\<?, +\>?}
+function try-combine
+  if combinable[it.op] then it <<< children: combine-binary it.op, it else it
+
 transform.Binary = (node) ->
   | node.children.some (-> !it) => partial-operator node
-  | rewrite-binary[node.op] => that node
   | node.lval => transform-default node
-  | node.op == \? => unfold.existance node
+  | rewrite-binary[node.op] => that try-combine node
   | _ => node
 
 function helper base, name, args
@@ -346,12 +361,14 @@ function rewrite-compare {op, children}
   key = if op.0 == \< then \min else \max
   helper (temporary \Math), key, children
 
-function rewrite-concat children: [source, value]
-  helper source, \concat [value]
+transform.In = (children: [key, source]) -> helper source, \includes [key]
+function rewrite-concat children: [source, ...values]
+  helper source, \concat values
 function rewrite-push children: [source, value]
   h \Sequence lines: [helper source, \push [h \Splat it: value]; source]
 
-transform.Import = -> helper (temporary \Object), \assign it.children
+transform.Import = ->
+  helper (temporary \Object), \assign combine-binary \Import it
 
 # Chain
 
@@ -384,6 +401,11 @@ transform.Call = ->
 
 t.member = (object, property) ->
   t.member-expression object, property, !property.key
+
+transform.Slice = ->
+  [{head} ...range] = it.children
+  tails = [h \Index key: h \Key name: \slice; h \Call args: range.filter -> it]
+  transform.Chain it <<< {type: \Chain head, tails}
 
 # Cascade
 
