@@ -254,8 +254,8 @@ function cache-index
       h \Sequence lines: [assign-cache, node <<< children: [base, key]]
     else node <<< children: assign-cache
 
-function cache-child node, index
-  assign-cache = if should-bind node then cache-index else cache-ref
+function cache-child node, index, no-bind
+  assign-cache = if !no-bind && should-bind node then cache-index else cache-ref
   [node.children[index], target] = assign-cache node.children[index]
   [target, node]
 
@@ -297,12 +297,12 @@ unfold <<<
 
 function transform-unfold
   tail = it.children.1.0
-  [select, unfold=conditional] =
+  [select, unfold=conditional, no-bind] =
     | tail.soak => [strip-soak]
     | tail.symbol == \.= => * strip-symbol, binary-node.bind void \=
-    | _ => * pass, unfold-slice
+    | _ => * pass, unfold-slice, true
 
-  [target, node] = cache-child it, 0
+  [target, node] = cache-child it, 0 no-bind
   unfold target, select node
 
 # Infix
@@ -315,7 +315,7 @@ function partial-operator node
 transform.Parens = (.it)
 map-op = of: \in
 function with-op
-  op = (map-op[it.op] || it.op)replace /\.(.)\./ \$1
+  op = (map-op[it.op] || it.op)replace /\.(.*)\./ \$1
   it <<< children: [type: \Node children: [] value: op, ...it.children]
 
 rewrite-unary = new: \New do: \Call
@@ -367,8 +367,24 @@ function rewrite-concat children: [source, ...values]
 function rewrite-push children: [source, value]
   h \Sequence lines: [helper source, \push [h \Splat it: value]; source]
 
+function assign-object head, items
+  props = items.reduce _, [] <| (props, node) -> props ++= node.items.map expand-shorthand
+  key = h \Arr items: props.map -> it.key
+  target = transform h \Chain {head, tails: [h \Index {key}]}
+  ref = if target.items.0.base.op == \= then temporary \that else head
+  [target, values] = if props.length == 1 then [target.items.0, props.0.val]
+  else [target, h \Arr items: props.map (.val)]
+  h \Sequence items: [binary-node \= target, values; ref]
+
+function is-object => \Obj == node-type it
+function not-object => !is-object it
 transform.Import = ->
-  helper (temporary \Object), \assign combine-binary \Import it
+  [head, ...items] = combine-binary \Import it
+  vars = items.filter not-object
+  target = if vars.length == 0 then transform head
+  else helper (temporary \Object), \assign [head, ...vars]
+  literals = items.filter is-object
+  if literals.length == 0 then target else assign-object target, literals
 
 # Chain
 

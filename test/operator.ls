@@ -22,9 +22,22 @@ function main t
   actual = [1] ++ ([1] ++ 1)
   t.deep-equal actual, [1 1 1] 'concat arrays ++'
 
-  result = {a: 1} <<< (b: 2)
-  expecetd = a: 1 b: 2
-  t.deep-equal result, expecetd, 'copy object properties'
+  actual = {a: 1} <<< (b: 2)
+  expected = a: 1 b: 2
+  t.deep-equal actual, expected, 'copy object properties'
+
+  actual = {}
+  actual <<< a: 1
+  expected = a: 1
+  t.deep-equal actual, expected, 'copy object literal with 1 property'
+
+  actual = {}
+  q = ->
+    q := -> t.fail 'cache target when copying properties'
+    actual
+  q! <<< a: 1 b: 2
+  expected = a: 1 b: 2
+  t.deep-equal actual, expected, 'copy object literal properties'
 
   source = a: void
   t.ok \a of source, 'of operator'
