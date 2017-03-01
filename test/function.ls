@@ -31,6 +31,13 @@ function main t
   fn = ([a, b]: arg=[]) ->
   t.equal fn!, void 'handle auto returning before destructuring parameters'
 
+  message = 'call with all arguments'
+  expected = [{} message]
+  all-args = -> []slice.call &
+  pass-all = -> all-args ...
+  actual = pass-all ...expected
+  t.deep-equal actual, expected, message
+
   expected = @
   fn = ~> @
   actual = fn!

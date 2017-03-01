@@ -413,6 +413,7 @@ transform.Chain = ->
 transform.Call = ->
   | it.new => set-type it, \New
   | it.base.value == \await => transform-await it
+  | it.method => helper it.base, \call it.args
   | _ => it
 
 t.member = (object, property) ->
