@@ -327,7 +327,7 @@ post-transform.Logical = with-op
 
 rewrite-binary =
   \? : unfold.existance, \|| : rewrite-logical, \&& : rewrite-logical
-  \<< : compose, \++ : rewrite-concat, \++= : rewrite-push
+  \<< : compose, \>> : compose, \++ : rewrite-concat, \++= : rewrite-push
   \<? : rewrite-compare, \>? : rewrite-compare
 function rewrite-logical => set-type it, \Logical
 
@@ -351,7 +351,7 @@ function try-combine
 transform.Binary = (node) ->
   | node.children.some (-> !it) => partial-operator node
   | node.lval => transform-default node
-  | rewrite-binary[node.op] => that try-combine node
+  | rewrite-binary[node.op] => that try-combine reverse-compose node
   | _ => node
 
 function helper base, name, args
@@ -420,9 +420,10 @@ t.member = (object, property) ->
   t.member-expression object, property, !property.key
 
 transform.Slice = ->
-  [{head} ...range] = it.children
-  tails = [h \Index key: h \Key name: \slice; h \Call args: range.filter -> it]
-  transform.Chain it <<< {type: \Chain head, tails}
+  [source, ...range] = it.children
+  slice = it <<< h \Index key: h \Key name: \slice
+  call = h \Call args: range.filter -> it
+  transform.Chain source <<< tails: source.tails ++ [slice, call]
 
 # Cascade
 

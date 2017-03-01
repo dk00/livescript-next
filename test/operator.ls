@@ -52,6 +52,13 @@ function main t
   actual = fn wrap: [0 [expected = 'compose functions .']]
   t.equal actual, expected, expected
 
+  message = 'compose functions forwardly >>'
+  mul2 = -> it * 2
+  add1 = -> it + 1
+  calc = mul2 >> add1
+  actual = calc 3
+  t.equal actual, expected = 7 message
+
   expected = message: 'unary do: call function without arguments'
   actual = do (a) -> a || expected
   t.equal actual, expected, expected.message

@@ -78,6 +78,12 @@ function main t
   actual = [0 1 2 3 4 5][1 til q]
   t.deep-equal actual, [1 2] 'array range slicing'
 
+  source = [to 2]
+  get = -> it
+  expected = [1 2]
+  actual = get source .[1 to]
+  t.deep-equal actual, expected, 'range slicing with chain'
+
   t.ok
     .. .., 'cascade: 1 level'
 
