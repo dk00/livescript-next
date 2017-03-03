@@ -2,6 +2,7 @@ function main t
   t.equal 1 + 1 2 'binary expression +'
   t.equal 1 .|. 2 3 'binary expression |'
   t.equal -(-1), 1 'unary expression -'
+  t.equal actual = -7 %% 5 expected = 3 'signed modulo'
 
   a = void
   b = 2

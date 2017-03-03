@@ -328,8 +328,14 @@ post-transform.Logical = with-op
 rewrite-binary =
   \? : unfold.existance, \|| : rewrite-logical, \&& : rewrite-logical
   \<< : compose, \>> : compose, \++ : rewrite-concat, \++= : rewrite-push
-  \<? : rewrite-compare, \>? : rewrite-compare
+  \<? : rewrite-compare, \>? : rewrite-compare, \%% : signed-modulo
 function rewrite-logical => set-type it, \Logical
+
+function signed-modulo
+  [dividend, divisor] = it.children
+  [ref, cache] = cache-ref divisor, \div$
+  signed = binary-node \+ (binary-node \% dividend, cache), ref
+  it <<< op: \% children: [signed, ref]
 
 function compose
   call = it.children.reduce-right (arg, base) -> h \Call {base, args: [arg]}
