@@ -49,6 +49,10 @@ function last => it[it.length-1]
 function replace-last items, fn
   items.slice 0 -1 .concat fn items[items.length-1]
 function list-apply whatever, fn => whatever.map? fn or fn whatever
+function find-first items, fn
+  result = void
+  items.some (item, index) -> if fn item then result := [that, index] else void
+  result
 
 function merge scope, nested={}
   Object.keys nested .forEach (key) -> scope[key] .|.= nested[key]
@@ -141,61 +145,54 @@ function mark-lval
   if it.value != \void then {+lval, it.constructor, it.children} <<< it
   else null
 
-function set-lval
+function rewrite-assign
   it.children = [mark-lval it.children.0; it.children.1] if it.op == \=
-  it
-
-function strip-assign => it <<< op: it.op.replace \: ''
-function rewrite-assign => switch
+  it.op .= replace \: ''
+  switch
   | rewrite-binary[it.op] => that it
   | rewrite-binary[it.op.slice 0 -1]
     it <<< op: \= children: [it.children.0, that it]
   | _ => it
 
-function pack-pattern active, name, pattern
-  if active && !pattern.key then h \Prop key: (h \Key {name}), val: pattern
-  else pattern
+function replace-named node, name
+  ref = h \Key {name}
+  if node.op then node <<< (node.children.0): ref else ref
 
-function extract-pattern
-  element = if it.op then it[it.children.0] else it
-  pattern = element.val || element
-  pattern.items && pattern.name && pattern
+function replace-pattern node, name
+  name
 
-function replace-pattern node, pattern
-  if node.op then node <<< (node.children.0): pattern else pattern
+function split-named node, dest, {name, assign, rest}, index
+  pivot = replace-pattern dest.items[index], name
+  dest <<< items: dest.items[til index] ++ pivot
+  name: node, assign: assign || binary-node \= rest, get-ref name
 
-function split-named
-  [items, base] = [it.items, it <<< items: []]
-  items.reduce _, [base] <| (parts, element, index) ->
-    skip = parts.length > 1 && \Literal == node-type element
-    pattern = !skip && extract-pattern element
-    ref = if pattern then replace-pattern element, h \Key {pattern.name}
-    else element
-    unless skip
-      parts.push h \Obj items: [] unless last parts .items
-      last parts .items.push pack-pattern parts.length-1 index, ref
-    parts.push binary-node \= pattern, h \Var value: pattern.name if pattern
-    parts
+function get-ref
+  item = if it.op then it[it.children.0] else it
+  item.val || item
 
-function assign-all parts, value
-  [ref, cache] = cache-ref value, \ref$
-  items = parts.map (node, index) ->
-    value = if index > 1 then ref else cache
-    if node.op then node else binary-node \= node, value
-  h \Block lines: items.concat if parts.length > 1 then ref else []
+function destructure-named
+  dest = get-ref it
+  switch
+  | dest.items && dest.name
+    name: (replace-named it, that), rest: dest <<< name: void
+  | find-first dest.items || [] destructure-named
+    split-named it, dest, ...that
+
+function restructure node, {name, assign, rest}
+  node <<< children: [rest, binary-node \= name, node.children.1] if rest
+  if assign then h \Block lines: [node, assign] else split-destructing node
 
 function split-destructing node
-  {children: [target, value]} = node
-  return node if node.lval || !target.items
-  parts = split-named target
-  if parts.length < 2 then node else {} <<< node <<< assign-all parts, value
+  {children: [target]} = node
+  if !node.lval && destructure-named target then restructure node, that
+  else rewrite-assign node
 
 NONE = {+void, +null}
 transform.Assign = (node) ->
   | NONE[node.children.0.value] => node.children.1
   | node.logic => unfold.logic node
   | \Existence == node-type node.children.0 => unfold.soak node
-  | _ => rewrite-assign split-destructing strip-assign set-lval node
+  | _ => split-destructing node
 post-transform.Assign = with-op
 
 function transform-lval index=0 => (node) ->
@@ -474,11 +471,17 @@ function auto-return {body, bound, hushed}
   | _ => body
 
 function unfold-params
-  [{items} ...parts] = split-named h \Arr items: it
-  params = it.map (, i) ->
-    mark-lval if items[i] && \Literal != node-type items[i] then items[i]
-    else temporary "arg#{i}$"
-  * params, [assign-all parts, h \Arr items: params]
+  [{name, assign, rest} split] = that if find-first it, destructure-named
+  params = it.map (arg, index) ->
+    | index == split => name <<< lval: true
+    | index > split || \Literal == node-type arg => temporary "arg#{index}$"
+    | _ => arg <<< lval: true
+  unpack = if assign then [that] else []
+  unpack.push binary-node \= rest, get-ref params[split] if rest
+  if split + 1 < params.length
+    unpack.push binary-node \=,
+      (h \Arr items: it[split+1 to]), h \Arr items: params[split+1 to]
+  * params, unpack
 
 transform.Fun = (node) ->
   name = if node.name then temporary that else void
