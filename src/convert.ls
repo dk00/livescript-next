@@ -233,8 +233,10 @@ function should-cache => !no-cache[node-type it] || it.value == \..
 function temporary => h \Var value: it
 function cache-ref value, id=\that
   node = if value.it then transform value else value
-  * name = if should-cache node then temporary id else node
-    if name == node then node else binary-node \= name, node
+  if \Assign == node-type node then [node.left, node]
+  else
+    * name = if should-cache node then temporary id else node
+      if name == node then node else binary-node \= name, node
 
 function merge-assignment
   return it if it.some -> \Assign != node-type it
