@@ -13,6 +13,7 @@ function h display-name, props
   children = Object.keys props .filter -> !attr-keys[it]
   {constructor: {display-name} children} <<< props
 function q type, ...children => {type, children}
+function clone node, props => node{constructor, children} <<< node <<< props
 
 function transform node
   return node unless node
@@ -155,32 +156,47 @@ function rewrite-assign
   | _ => it
 
 function replace-named node, name
+  base = node.val || node
   ref = h \Key {name}
-  if node.op then node <<< (node.children.0): ref else ref
+  wrap-pattern node, if !base.op then ref
+  else clone base, (base.children.0): ref
 
-function replace-pattern node, name
-  name
+function shorthand-pattern key, pattern
+  !key || (!pattern.items && key.name == get-left pattern .name)
+function wrap-pattern node, pattern
+  if shorthand-pattern node.key, pattern then pattern
+  else clone node, val: pattern
 
-function split-named node, dest, {name, assign, rest}, index
-  pivot = replace-pattern dest.items[index], name
-  dest <<< items: dest.items[til index] ++ pivot
-  name: node, assign: assign || binary-node \= rest, get-ref name
+function wrap-prop start => (node, index) ->
+  h \Prop key: (h \Key name: start + index), val: node
 
-function get-ref
-  item = if it.op then it[it.children.0] else it
-  item.val || item
+function split-named node, dest, [head, rest] index
+  tails = dest.items.slice index + 1
+  tails.unshift wrap-pattern dest.items[index], rest if rest
+  dest <<< items: dest.items.slice 0 index .concat head
+  items = if \Arr != node-type dest then tails
+  else tails.map wrap-prop index .filter -> \Literal != node-type it.val
+  * node, if items.length > 0 then h \Obj {items} else void
+
+function get-left => if it.op then it[it.children.0] else it
+function get-ref => get-left it.val || it
+
+function fix-prop
+  key = it.children.0
+  if !it.op || \Prop != node-type it[key] then it
+  else it[key] <<< val: it <<< (key): it[key]val
 
 function destructure-named
   dest = get-ref it
+  dest.items .= map fix-prop if dest.items
   switch
-  | dest.items && dest.name
-    name: (replace-named it, that), rest: dest <<< name: void
+  | dest.items && dest.name => * replace-named it, that; dest <<< name: void
   | find-first dest.items || [] destructure-named
     split-named it, dest, ...that
 
-function restructure node, {name, assign, rest}
-  node <<< children: [rest, binary-node \= name, node.children.1] if rest
-  if assign then h \Block lines: [node, assign] else split-destructing node
+function restructure node, [head, rest]
+  split-destructing node <<< children:
+    [rest, binary-node \= head, node.children.1]
 
 function split-destructing node
   {children: [target]} = node
@@ -473,17 +489,16 @@ function auto-return {body, bound, hushed}
   | _ => body
 
 function unfold-params
-  [{name, assign, rest} split] = that if find-first it, destructure-named
+  [[head, rest] split] = that if find-first it, destructure-named
   params = it.map (arg, index) ->
-    | index == split => name <<< lval: true
+    | index == split => head <<< lval: true
     | index > split || \Literal == node-type arg => temporary "arg#{index}$"
     | _ => arg <<< lval: true
-  unpack = if assign then [that] else []
-  unpack.push binary-node \= rest, get-ref params[split] if rest
-  if split + 1 < params.length
-    unpack.push binary-node \=,
-      (h \Arr items: it[split+1 to]), h \Arr items: params[split+1 to]
-  * params, unpack
+  destructure = if head then [binary-node \= rest, get-ref head] else []
+  if split + 1 < it.length
+    destructure.push binary-node \=,
+      (h \Arr items: it.slice split+1), h \Arr items: params.slice split+1
+  * params, destructure
 
 transform.Fun = (node) ->
   name = if node.name then temporary that else void
