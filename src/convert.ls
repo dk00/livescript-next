@@ -155,44 +155,33 @@ function rewrite-assign
     it <<< op: \= children: [it.children.0, that it]
   | _ => it
 
-function replace-named node, name
-  base = node.val || node
-  ref = h \Key {name}
-  wrap-pattern node, if !base.op then ref
-  else clone base, (base.children.0): ref
-
-function shorthand-pattern key, pattern
-  !key || (!pattern.items && key.name == get-left pattern .name)
-function wrap-pattern node, pattern
-  if shorthand-pattern node.key, pattern then pattern
-  else clone node, val: pattern
-
 function wrap-prop start => (node, index) ->
   h \Prop key: (h \Key name: start + index), val: node
 
-function split-named node, dest, [head, rest] index
-  tails = dest.items.slice index + 1
-  tails.unshift wrap-pattern dest.items[index], rest if rest
+function split-named dest, [head, rest] index
+  tails = [rest, ...dest.items.slice index + 1]
   dest <<< items: dest.items.slice 0 index .concat head
-  items = if \Arr != node-type dest then tails
-  else tails.map wrap-prop index .filter -> \Literal != node-type it.val
-  * node, if items.length > 0 then h \Obj {items} else void
+  * dest, h \Obj items: if \Arr != node-type dest then tails
+    else tails.map wrap-prop index .filter -> \Literal != node-type it.val
 
 function get-left => if it.op then it[it.children.0] else it
-function get-ref => get-left it.val || it
 
 function fix-prop
   key = it.children.0
   if !it.op || \Prop != node-type it[key] then it
   else it[key] <<< val: it <<< (key): it[key]val
 
-function destructure-named
-  dest = get-ref it
-  dest.items .= map fix-prop if dest.items
-  switch
-  | dest.items && dest.name => * replace-named it, that; dest <<< name: void
-  | find-first dest.items || [] destructure-named
-    split-named it, dest, ...that
+function split-structure => switch
+  | it.name => * temporary that; it <<< name: void
+  | find-first it.items, destructure-named => split-named it, ...that
+
+function destructure-named node => switch
+  | node.val => destructure-named that ?.map -> clone node, val: it
+  | node.op && destructure-named node[node.children.0]
+    [left, right] = node.children
+    cache-ref node[right], \default$ .reverse!map (ref, index) ->
+      clone node, (left): that[index], (right): ref
+  | node.items => split-structure node <<< items: that.map fix-prop
 
 function restructure node, [head, rest]
   split-destructing node <<< children:
@@ -488,13 +477,18 @@ function auto-return {body, bound, hushed}
     body <<< lines: body.lines.slice 0 -1 .concat h \Return it: result
   | _ => body
 
+function replace-default node, head
+  if node.op then node <<< lval: true (node.children.0): head else head
+
 function unfold-params
-  [[head, rest] split] = that if find-first it, destructure-named
+  [[head, rest] split] = that if find-first it, -> destructure-named get-left it
+  last = if head?items then temporary "arg#{split}$" else head
   params = it.map (arg, index) ->
-    | index == split => head <<< lval: true
-    | index > split || \Literal == node-type arg => temporary "arg#{index}$"
+    | index > split, \Literal == node-type arg => temporary "arg#{index}$"
+    | index == split => replace-default arg, last
     | _ => arg <<< lval: true
-  destructure = if head then [binary-node \= rest, get-ref head] else []
+  cache = if last != head then binary-node \= head, last else head
+  destructure = if cache then [binary-node \= rest, cache] else []
   if split + 1 < it.length
     destructure.push binary-node \=,
       (h \Arr items: it.slice split+1), h \Arr items: params.slice split+1

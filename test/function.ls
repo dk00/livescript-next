@@ -31,6 +31,11 @@ function main t
   fn = ([a, b]: arg=[]) ->
   t.equal fn!, void 'handle auto returning before destructuring parameters'
 
+  fn = ({x, {a}: b, y}) -> [a, b, x, y]
+  actual = fn {x: 1, y: 3 b: {a: 2}}
+  expected = [2 {a: 2} 1 3]
+  t.deep-equal actual, expected, 'named desturcturing without parameter names'
+
   message = 'call with all arguments'
   expected = [{} message]
   all-args = -> []slice.call &

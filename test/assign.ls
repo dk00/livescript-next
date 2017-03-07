@@ -75,11 +75,11 @@ function main t
   {object-def=1} = {}
   t.equal object-def, 1 'destructure object with default values'
 
-  expected = message: 'named destructing'
+  expected = message: 'named destructuring'
   {{message}: actual} = actual: expected
   t.equal actual, expected, message
 
-  message = 'named destructing with default values'
+  message = 'named destructuring with default values'
   expected = [message, {message}, message]
   [[, {message}: p]: q=expected, [r]: s=expected] = []
   actual = [r, p, message]
@@ -87,8 +87,14 @@ function main t
 
   [[p]: q,, {r}: s] = [[v=[1]] 0 r: v]
   actual = [p, q, r, s]
-  expcted = [v, [v] v, r: v]
-  t.deep-equal actual, expcted, 'named destructing with skipped values'
+  expected = [v, [v] v, r: v]
+  t.deep-equal actual, expected, 'named destructuring with skipped values'
+
+  * i = a: 1 h: 5 b: c: 2 g: 3; f = d: 4
+  {a, b: {c, {d}: e=f, g} h} = i
+  actual = [a, c, d, e, g, h]
+  expected = [1 2 4 f, 3 5]
+  t.deep-equal actual, expected, 'named destructuring in nested structure'
 
   a = b: 0 c: 1 d: 2
   expected = b: 0 c: 1 e: 3
