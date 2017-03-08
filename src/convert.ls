@@ -314,7 +314,7 @@ function transform-unfold
 function partial-operator node
   node.children = node.children.map -> it || temporary \it
   node <<< constructor: display-name: \Assign if /[^=]?=$/test node.op
-  h \Fun params: [] body: h \Block lines: [node]
+  h \Fun bound: true params: [] body: h \Block lines: [node]
 
 transform.Parens = (.it)
 map-op = of: \in
