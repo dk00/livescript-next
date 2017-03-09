@@ -38,8 +38,11 @@ function define node-type, ...child-types
     ..scope ||= it.scope
 
 function t node, scope
-  build if node.children.length < 1 then node
-  else post-convert convert-children post-transform transform-children node
+  try
+    build if node.children.length < 1 then node
+    else post-convert convert-children post-transform transform-children node
+  catch
+    throw (Error "#e (#{node.line}:#{node.first_column})") <<< loc: L node
 
 t <<< types
 # work around babel/babel#4741
@@ -657,7 +660,7 @@ t.property = (key, value) ->
   t.object-property key, value, !key.key, key.name == value.name
 
 t <<<
-  unk: -> throw message: "not implemented: #{node-type it}"
+  unk: -> throw "not implemented: #{it.type}"
 
   Node: (.value)
   Literal: -> literals[it.value] or t.valueToNode eval it.value
