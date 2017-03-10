@@ -11,6 +11,17 @@ function object t
   t.equal d.value, value, 'computed property'
   expected = {property: value, another: 1}
   t.deep-equal {another: 1 ...a} expected, 'spread property'
+
+  a = a: 1
+  expected = b: 7
+  actual = {a.b=expected.b}
+  t.deep-equal actual, expected, 'shorthand property default values'
+
+  a = {}
+  expected = b: 7
+  actual = a{b=expected.b}
+  t.deep-equal actual, expected, 'default value in substructure'
+
   t.end!
 
 function array t

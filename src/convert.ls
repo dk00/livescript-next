@@ -42,7 +42,8 @@ function t node, scope
     build if node.children.length < 1 then node
     else post-convert convert-children post-transform transform-children node
   catch
-    throw (Error "#e (#{node.line}:#{node.first_column})") <<< loc: L node
+    throw if e.loc then e
+    else (Error "#e (#{node.line}:#{node.first_column})") <<< loc: L node
 
 t <<< types
 # work around babel/babel#4741
@@ -135,10 +136,13 @@ function map-values object, value
     result[key] = value object[key]
     result
 
+function chain-tail => it.key || it
 function expand-shorthand
-  if it.children.length < 1
-    h \Prop key: it, val: (h \Var value: it.name) <<< it
-  else it
+  node = fix-prop it
+  if node.children.length < 1 || node.op
+    value = if node.op then node else (h \Var value: node.name) <<< node
+    h \Prop key: (chain-tail get-left node), val: value
+  else node
 
 transform.Obj = ->
   transform.Arr it <<< children: [it.children.0.map expand-shorthand]
@@ -286,10 +290,10 @@ function pack-slice node, val => if node.val then node <<< {val} else val
 function bind-slice slice, target, object
   slice <<< items: slice.items.map (item, index) ->
     base = if index then object else target
-    key = item.val || item
+    key = item.val || get-left item
     key <<< h \Key name: key.value if item.val && \Var == node-type key
     pack-slice item, if key.items then bind-slice key, base, object
-    else h \Index {base, key}
+    else replace-default item, h \Index {base, key}
 function unfold-slice target, children: [object, [key: slice, ...tails]]
   head = bind-slice slice, target, object
   h \Chain {head, tails}
@@ -381,7 +385,8 @@ function rewrite-push children: [source, value]
   h \Sequence lines: [helper source, \push [h \Splat it: value]; source]
 
 function assign-object head, items
-  props = items.reduce _, [] <| (props, node) -> props ++= node.items.map expand-shorthand
+  props = items.reduce _, [] <|
+  (props, node) -> props ++= node.items.map expand-shorthand
   key = h \Arr items: props.map -> it.key
   target = transform h \Chain {head, tails: [h \Index {key}]}
   ref = if target.items.0.base.op == \= then temporary \that else head
@@ -647,11 +652,11 @@ literals = <[this arguments eval]>reduce (data, name) ->
 , void: t.unaryExpression \void t.valueToNode 8
 literals\* = literals.void
 
-function convert-property => switch
-  | it.type == \ObjectProperty => it
-  | it.type == \MemberExpression => t.property it.property, it
-  | t.isSpreadElement it => it <<< type: \SpreadProperty
-  | _ => t.property it.left, it <<< type: \AssignmentPattern
+derive-property =
+  ObjectProperty: pass
+  MemberExpression: -> t.property it.property, it
+  SpreadElement: -> it <<< type: \SpreadProperty
+function convert-property => derive-property[it.type] it
 
 t.object = (properties) ->
   t.object-expression properties.map convert-property
