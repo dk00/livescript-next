@@ -477,12 +477,14 @@ function declare-vars block, known
 
 # Function
 
-function auto-return {body, bound, hushed}
-  result = last body.lines
+function auto-return body, {init, bound, hushed}
+  result = last lines = body.children.0
+  lines.unshift ...init
   switch
-  | bound && body.lines.length == 1 => result
+  | bound && lines.length == 1 => transform result
   | !hushed && result && \Return != node-type result
-    body <<< lines: body.lines.slice 0 -1 .concat h \Return it: result
+    body.children.0 = lines[til -1] ++ h \Return it: result
+    body
   | _ => body
 
 function replace-default node, head
@@ -504,10 +506,13 @@ function unfold-params
 
 transform.Fun = (node) ->
   name = if node.name then temporary that else void
-  [params, destructure] = unfold-params node.params
-  block = auto-return node
-  block.lines = destructure ++ block.lines
-  node <<< children: [h \Node value: node; name, params, block]
+  [params, node.init] = unfold-params node.params
+  node <<< children: [h \Node value: node; name, params, node.body]
+
+post-transform.Fun = ->
+  [value: options,,, body] = it.children
+  it.children.3 = auto-return body, options
+  it
 
 post-convert.Await = -> it <<< scope: it.scope <<< '.await': REF
 function transform-await
