@@ -70,6 +70,11 @@ function main t
   expecetd = [1 1]
   t.deep-equal actual, expecetd, 'partially apply operator'
 
+  actual = expected = {}
+  fn = (a =)
+  fn!
+  t.deep-equal actual, expected, 'partially assignment'
+
   function T a, b => @prop = {a, b}
   t.ok new T, 'new operator without arguments'
 

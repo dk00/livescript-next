@@ -468,10 +468,9 @@ function unwrap-blocks => it.reduce _, [] <| (body, node) ->
 
 function omit-declared => if it < DECL then it else void
 
-function declare-vars block, known
-  names = if block.scope then Object.keys that .filter ->
-    !(known[it].&.DECL) && (that[it].&.DECL)
-  else []
+function declare-vars {scope}: block, known
+  names = Object.keys scope .filter ->
+    !(known[it].&.DECL) && (scope[it].&.DECL)
   block.body.unshift t q \Vars names.map temporary if names.length > 0
   block
 
@@ -481,7 +480,6 @@ function auto-return body, {init, bound, hushed}
   result = last lines = body.children.0
   lines.unshift ...init
   switch
-  | bound && lines.length == 1 => transform result
   | !hushed && result && \Return != node-type result
     body.children.0 = lines[til -1] ++ h \Return it: result
     body
@@ -518,8 +516,13 @@ post-convert.Await = -> it <<< scope: it.scope <<< '.await': REF
 function transform-await
   (set-type it, \Await) <<< children: [it.children.1.0]
 
+function extract-result
+  if it.body.0.type == \ReturnStatement && it.body.length == 1
+    it.body.0.argument <<< it{loc}
+  else it
+
 t.function = ({bound} name, params, block) ->
-  nested = block.scope || {}
+  nested = block.scope
   if params.length == 0 && nested.it .&. REF
     params := [(t.identifier \it) <<< scope: it: DECL]
   body = declare-vars block, Object.assign {} ...params.map (.scope)
@@ -527,8 +530,9 @@ t.function = ({bound} name, params, block) ->
   scope = map-values (nested <<< \.await : DECL, it: DECL), omit-declared
 
   result = if bound
-    (t.arrow-function-expression params, body, async) <<<
-      expression: t.is-expression body
+    extracted = extract-result body
+    (t.arrow-function-expression params, extracted, async) <<<
+      expression: t.is-expression extracted # Work around babel-istanbul
   else t.function-expression name, params, body,, async
   result <<< {scope}
 
