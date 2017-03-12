@@ -1,7 +1,7 @@
 {
   "name": "livescript-next",
   "description": "Enable latest ES features for LiveScript",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "main": "lib/index.js",
   "module": "es/index.js",
   "browser": "dist/index.js",
@@ -55,6 +55,6 @@
     "babel",
     "javascript"
   ],
-  "author": "dk00 <dk00@users.noreply.github.com>",
+  "author": "dk00 <dk@csie.org>",
   "license": "Unlicense"
 }

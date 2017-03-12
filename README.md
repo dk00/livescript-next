@@ -29,34 +29,39 @@ export { name, name as default, name as alias };
 
 See [wiki](//github.com/dk00/livescript-next/wiki) for what are added and what are going to be added.
 
-## Usage
+## Usage with babel in node
 
 Install required packages:
 
 ```
-npm i --save-dev livescript livescript-next babel-plugin-preset-stage-0
+npm i --save-dev livescript livescript-next babel-plugin-preset-stage-0 transform-es2015-modules-commonjs
 ```
 
-The `parse` function can be used by `babel` to parse `.ls` files, add this to babel options to enable it. Also add `stage-0` presets to handle [stage 0](//github.com/tc39/proposals/blob/master/stage-0-proposals.md) and [above](//github.com/tc39/proposals) ES features.
+Set babel options(or specify this in `.babelrc`):
 
 ```ls
-presets: <[stage-0]>
-parser-opts: parser: require \livescript-next .parse
+babel-options =
+  presets: <[stage-0]>
+  plugins: <[transform-es2015-modules-commonjs]>
+  parser-opts: parser: \livescript-next
 ```
 
-When using in node with `babel-register`, add commonjs transform plugin
+Register require hook and require the entry file:
 
 ```ls
-plugins: <[transform-es2015-modules-commonjs]>
+require \livescript
+delete require.extensions\.ls
+require \babel-register <| babel-options
+require \./index.ls
 ```
 
 ## Features
 
 - Module
   - [x] Named import and export
-  - [ ] Export expression
+  - [ ] Export declaration
   - [ ] Import only side-effect
-- Destructing assignment/parameter
+- ES Destructuring assignment/parameter output
   - [x] Basic support
   - [x] With default value
   - [x] Spread operator

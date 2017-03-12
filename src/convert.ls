@@ -666,8 +666,9 @@ function convert-property => derive-property[it.type] it
 t.object = (properties) ->
   t.object-expression properties.map convert-property
 
+function computed => !it.key && !t.is-literal it
 t.property = (key, value) ->
-  t.object-property key, value, !key.key, key.name == value.name
+  t.object-property key, value, (computed key), key.name == value.name
 
 t <<<
   unk: -> throw "not implemented: #{it.type}"
