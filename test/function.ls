@@ -48,6 +48,11 @@ function main t
   actual = fn!
   t.equal actual, expected, 'bind this lexically'
 
+  expected = {}
+  fn = ~> if 1 then expected
+  actual = fn!
+  t.equal actual, expected, 'wrap only statement of bound functions'
+
   expected = -> await expected
   actual = expected!
   t.ok actual.then, 'the async function returns a Promise'

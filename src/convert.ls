@@ -518,7 +518,7 @@ function transform-await
 
 function extract-result
   if it.body.0.type == \ReturnStatement && it.body.length == 1
-    it.body.0.argument <<< it{loc}
+    (t.expression it.body.0.argument) <<< it{loc}
   else it
 
 t.function = ({bound} name, params, block) ->
