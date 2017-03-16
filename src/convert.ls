@@ -430,6 +430,7 @@ transform.Chain = ->
     bind-prop node <<< base: tree, children: [\base] ++ node.children
 transform.Call = ->
   | it.new => set-type it, \New
+  | it.base.value == \async => it.args.0 <<< async: true
   | it.base.value == \await => transform-await it
   | it.method => helper it.base, \call it.args
   | _ => it
@@ -517,16 +518,16 @@ function transform-await
   (set-type it, \Await) <<< children: [it.children.1.0]
 
 function extract-result
-  if it.body.0.type == \ReturnStatement && it.body.length == 1
+  if it.body.length == 1 && it.body.0.type == \ReturnStatement
     (t.expression it.body.0.argument) <<< it{loc}
   else it
 
-t.function = ({bound} name, params, block) ->
+t.function = ({bound, async} name, params, block) ->
   nested = block.scope
   if params.length == 0 && nested.it .&. REF
     params := [(t.identifier \it) <<< scope: it: DECL]
   body = declare-vars block, Object.assign {} ...params.map (.scope)
-  async = !!nested\.await
+  async ||= !!nested\.await
   scope = map-values (nested <<< \.await : DECL, it: DECL), omit-declared
 
   result = if bound
