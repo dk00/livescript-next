@@ -33,6 +33,15 @@ function main t
   expected = 0: 0 1: 2 2: 4 3: 6
   t.deep-equal actual, expected, 'object comprehension with iteration'
 
+  source =
+    * a: [\x]
+    * a: [\y]
+
+  actual = [b for {a: [b]} in source]
+  expected = [\x \y]
+  t.deep-equal actual, expected,
+  'destructuring in comprehension with iterables'
+
   t.end!
 
 export default: main

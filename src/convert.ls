@@ -701,7 +701,7 @@ t <<<
   Assign: define \AssignmentExpression \pass \lval \expression
   Splat: define \SpreadElement \expression
 
-  Vars: define \declare \pass
+  Vars: define \declare \lval
   Block: define \BlockStatement \statement
   Sequence: define \SequenceExpression
 
