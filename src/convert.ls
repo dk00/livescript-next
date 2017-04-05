@@ -27,7 +27,7 @@ function transform-children
 function post-transform => post-transform[it.type]? it or it
 function post-convert => post-convert[it.type]? it or it
 
-function build => t[it.type]? it or t.unk it
+function build => if t[it.type] then that it else t.unk it
 function define node-type, ...child-types
   build = t[node-type]
   types = child-types.map -> if it != \pass then t[it || \expression] else void
@@ -513,6 +513,10 @@ post-transform.Fun = ->
   it.children.3 = auto-return body, options
   it
 
+transform.Yield = (node) ->
+  node <<< children: [node.it, h \Node value: node.op == \yieldfrom]
+post-convert.Yield = -> it <<< scope: it.scope <<< '.yield': REF
+
 post-convert.Await = -> it <<< scope: it.scope <<< '.await': REF
 function transform-await
   (set-type it, \Await) <<< children: [it.children.1.0]
@@ -522,19 +526,22 @@ function extract-result
     (t.expression it.body.0.argument) <<< it{loc}
   else it
 
-t.function = ({bound, async} name, params, block) ->
+function-reserved = \.yield : DECL, \.await : DECL
+t.function = ({bound, generator, async} name, params, block) ->
   nested = block.scope
   if params.length == 0 && nested.it .&. REF
+    nested.it = DECL
     params := [(t.identifier \it) <<< scope: it: DECL]
   body = declare-vars block, Object.assign {} ...params.map (.scope)
   async ||= !!nested\.await
-  scope = map-values (nested <<< \.await : DECL, it: DECL), omit-declared
+  generator ||= !!nested\.yield
+  scope = map-values (nested <<< function-reserved), omit-declared
 
   result = if bound
     extracted = extract-result body
     (t.arrow-function-expression params, extracted, async) <<<
       expression: t.is-expression extracted # Work around babel-istanbul
-  else t.function-expression name, params, body,, async
+  else t.function-expression name, params, body, generator, async
   result <<< {scope}
 
 # If
@@ -707,6 +714,7 @@ t <<<
 
   Return: define \ReturnStatement \expression
   Await: define \AwaitExpression \expression
+  Yield: define \YieldExpression \expression \pass
   Fun: define \function \pass \pass \lval
 
   Conditional: define \ConditionalExpression '' '' ''
