@@ -505,8 +505,10 @@ function unfold-params
 
 transform.Fun = (node) ->
   name = if node.name then temporary that else void
-  [params, node.init] = unfold-params node.params
-  node <<< children: [h \Node value: node; name, params, node.body]
+  if name && node.bound then binary-node \= name, node <<< name: void
+  else
+    [params, node.init] = unfold-params node.params
+    node <<< children: [h \Node value: node; name, params, node.body]
 
 post-transform.Fun = ->
   [value: options,,, body] = it.children
@@ -526,6 +528,9 @@ function extract-result
     (t.expression it.body.0.argument) <<< it{loc}
   else it
 
+function bind-this
+  t transform helper (h \Node value: it), \bind [h \Literal value: \this]
+
 function-reserved = \.yield : DECL, \.await : DECL
 t.function = ({bound, generator, async} name, params, block) ->
   nested = block.scope
@@ -537,12 +542,12 @@ t.function = ({bound, generator, async} name, params, block) ->
   generator ||= !!nested\.yield
   scope = map-values (nested <<< function-reserved), omit-declared
 
-  result = if bound
+  result = if bound && !generator
     extracted = extract-result body
     (t.arrow-function-expression params, extracted, async) <<<
       expression: t.is-expression extracted # Work around babel-istanbul
   else t.function-expression name, params, body, generator, async
-  result <<< {scope}
+  (if bound && generator then bind-this result else result) <<< {scope}
 
 # If
 
