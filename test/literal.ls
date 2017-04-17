@@ -22,6 +22,11 @@ function object t
   actual = a{b=expected.b}
   t.deep-equal actual, expected, 'default value in substructure'
 
+  get = (.a{b})
+  actual = get a: b: 7 c: 6
+  expected = b: 7
+  t.deep-equal actual, expected, 'partially applied substructure'
+
   t.end!
 
 function array t
