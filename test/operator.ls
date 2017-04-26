@@ -45,6 +45,7 @@ function main t
 
   source = [0 1 2]
   t.ok 1 in source, 'in operator'
+  t.ok 3 not in source, 'not in operator'
 
   a = (q) -> q.0
   b = (q) -> q.wrap

@@ -378,7 +378,10 @@ function rewrite-compare {op, children}
   key = if op.0 == \< then \min else \max
   helper (temporary \Math), key, children
 
-transform.In = (children: [key, source]) -> helper source, \includes [key]
+transform.In = (children: [key, source] negated) ->
+  it = helper source, \includes [key]
+  if negated then h \Unary op: \! it else it
+
 function rewrite-concat children: [source, ...values]
   helper source, \concat values
 function rewrite-push children: [source, value]
