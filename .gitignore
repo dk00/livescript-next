@@ -1,6 +1,12 @@
+.pnp*
 node_modules
 dist
 es
 lib
 coverage
 .nyc_output
+*.log
+.netlify
+.DS_Store
+*.tgz
+www
