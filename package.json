@@ -3,9 +3,9 @@
   "description": "Enable latest ES features for LiveScript",
   "version": "0.0.4",
   "main": "lib/index.js",
-  "module": "es/index.js",
+  "module": "dist/index.esm.js",
   "browser": "dist/index.js",
-  "jsnext:main": "es/index.js",
+  "jsnext:main": "dist/index.esm.js",
   "repository": "dk00/livescript-next",
   "bugs": "https://github.com/dk00/livescript-next/issues",
   "homepage": "https://github.com/dk00/livescript-next#readme",
@@ -28,7 +28,6 @@
     "babel-plugin-external-helpers": "",
     "babel-preset-stage-0": "",
     "babel-register": "",
-    "gulp": "",
     "livescript": "",
     "nyc": "",
     "object.entries": "",
@@ -38,9 +37,10 @@
     "tape": ""
   },
   "scripts": {
-    "prepublish": "gulp dist",
-    "pretest": "gulp dist",
-    "test": "nyc --instrument false lsc test/run",
+    "build": "lsc scripts/ensure-lib; rollup -c; lsc scripts/ensure-link",
+    "prepublishOnly": "npm run build",
+    "pretest": "npm run build",
+    "test": "nyc --instrument false lsc test",
     "posttest": "nyc report -r lcov -r json && mv coverage/coverage-final.json coverage/coverage.json"
   },
   "keywords": [

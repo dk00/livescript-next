@@ -7,13 +7,14 @@ import
 target =
   input: \src/index.ls
   output:
-    * file: "dist/#name.esm.js" format: \es
-    * file: "dist/#name.js" format: \umd
-    * file: "lib/#name.js" format: \cjs
+    * file: "dist/index.esm.js" format: \es
+    * file: "dist/index.js" format: \umd
+    * file: "lib/index.js" format: \cjs
   plugins:
     node-resolve jsnext: true extensions: <[.ls .js]>
     babel require \./.babelrc
   name: name
+  external: <[livescript babel-core babel-types]>
   exports: \named sourcemap: true use-strict: false
 
 export default: target
