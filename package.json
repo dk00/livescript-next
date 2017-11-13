@@ -29,15 +29,15 @@
     "babel-preset-stage-0": "",
     "babel-register": "",
     "livescript": "",
+    "livescript-next": "",
     "nyc": "",
-    "object.entries": "",
     "rollup": "",
     "rollup-plugin-babel": "",
     "rollup-plugin-node-resolve": "",
     "tape": ""
   },
   "scripts": {
-    "build": "lsc scripts/ensure-lib; rollup -c; lsc scripts/ensure-link",
+    "build": "rollup -c",
     "prepublishOnly": "npm run build",
     "pretest": "npm run build",
     "test": "nyc --instrument false lsc test",
