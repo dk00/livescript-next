@@ -1,6 +1,8 @@
 module.exports = {
-  parserOpts: {
-    parser: 'livescript-next'
-  },
-  presets: ['stage-0']
+  plugins: [
+    '@babel/proposal-do-expressions',
+    '@babel/proposal-function-bind',
+    '@babel/proposal-export-default-from',
+    '@babel/proposal-async-generator-functions'
+  ]
 }

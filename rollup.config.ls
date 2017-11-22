@@ -15,7 +15,7 @@ target =
       sourcemap: true use-strict: false
   plugins:
     node-resolve jsnext: true extensions: <[.ls .js]>
-    babel require \./.babelrc
-  external: <[livescript babel-core babel-types]>
+    babel plugins: [\livescript]
+  external: <[livescript @babel/types @babel/core]>
 
 export default: target

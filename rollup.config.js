@@ -1,4 +1,5 @@
 import 'livescript'
-require('./register')()
+
+require('./register')({plugins: ['livescript']})
 
 export default require('./rollup.config.ls').default

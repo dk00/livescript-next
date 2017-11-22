@@ -1,7 +1,7 @@
 {
   "name": "livescript-next",
   "description": "Enable latest ES features for LiveScript",
-  "version": "0.0.4",
+  "version": "0.1.0-beta.0",
   "main": "lib/index.js",
   "module": "dist/index.esm.js",
   "browser": "dist/index.js",
@@ -15,32 +15,30 @@
     "lib"
   ],
   "dependencies": {
-    "babel-types": ""
-  },
-  "peerDependencies": {
-    "babel-preset-stage-0": "",
-    "livescript": ""
+    "@babel/types": "^7.7.4"
   },
   "devDependencies": {
-    "babel-core": "",
-    "babel-plugin-external-helpers": "",
-    "babel-plugin-istanbul": "",
-    "babel-plugin-transform-es2015-modules-commonjs": "",
-    "babel-preset-stage-0": "",
-    "babel-register": "",
-    "livescript": "",
-    "livescript-next": "",
-    "nyc": "",
+    "@babel/core": "^7.7.7",
+    "@babel/plugin-proposal-async-generator-functions": "^7.7.4",
+    "@babel/plugin-proposal-do-expressions": "^7.7.4",
+    "@babel/plugin-proposal-export-default-from": "^7.7.4",
+    "@babel/plugin-proposal-function-bind": "^7.7.4",
+    "@babel/plugin-transform-modules-commonjs": "^7.7.5",
+    "@babel/register": "^7.7.7",
+    "babel-plugin-istanbul": "^6.0.0",
+    "babel-plugin-livescript": "^0.0.3",
+    "livescript": "1.5.0",
+    "nyc": "^15.0.0",
     "rollup": "^1.27.14",
-    "rollup-plugin-babel": "",
-    "rollup-plugin-node-resolve": "",
-    "tape": ""
+    "rollup-plugin-babel": "4.0.0-beta.8",
+    "rollup-plugin-node-resolve": "^5.2.0",
+    "tape": "^4.12.1"
   },
   "scripts": {
     "build": "rollup -c",
     "prepublishOnly": "npm run build",
     "pretest": "npm run build",
-    "test": "nyc --instrument false lsc test",
+    "test": "nyc --instrument false -e \".ls\" lsc test",
     "posttest": "nyc report -r lcov -r json && mv coverage/coverage-final.json coverage/coverage.json"
   },
   "keywords": [

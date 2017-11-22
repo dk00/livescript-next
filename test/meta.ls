@@ -1,10 +1,12 @@
-function main t, parse
+function main t, {ast, convert}
   t.throws _, 'throw on not implemented node type' <| ->
-    parse \class
+    convert ast \class
 
-  actual = false
-  parse \1 source-file-name: \t.js parser: parse: -> actual := true
-  t.ok actual, 'pass not-ls code to original parser'
+  file = convert ast \1
+
+  actual = file.program.source-type
+  expected = \module
+  t.is actual, expected, 'set source type'
 
   t.end!
 

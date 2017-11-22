@@ -1,7 +1,11 @@
-require \../register <| plugins: <[istanbul]>
-parse = require \../src/parse .default
-options = parser-opts: parser: parse
-require \../register <| options
+{ast} = require \livescript
+require \../register <| plugins: <[\istanbul \livescript]>
+
+convert = require \../src/convert .default
+function parser-override code, {source-file-name}: options={} parse
+  if /\.ls$/test options.source-file-name then convert (ast code), options
+  else parse code, options
+require \../register <| plugins: [{parser-override}]
 
 features =
   module: \Module
@@ -22,4 +26,4 @@ else Object.keys features
 list.for-each (name) ->
   test features[name] || name, (require "./#name" .default)
 
-test \Meta (t) -> require \./meta .default t, parse
+test \Meta (t) -> require \./meta .default t, {ast, convert}
