@@ -1,41 +1,52 @@
+import
+  preact: {h, render}
+  'preact/hooks': {use-reducer, use-effect, use-ref}
+  './index.css': styles
+  'livescript-next': {convert}
+
+ls = require \livescript/lib/index
+
+ace-url = '//cdnjs.cloudflare.com/ajax/libs/ace/1.2.6/ace.js'
+
 function setup-editor element, {mode=\livescript on-change}
-  editor = ace.edit element
-    ..setTheme \ace/theme/chaos
-    ..setFontSize 14
-    ..setReadOnly true unless on-change
-    ..$blockScrolling = Infinity
-    ..getSession!
-      ..setUseWorker false
-      ..setMode "ace/mode/#mode"
-      ..setTabSize 2
-      ..setUseSoftTabs true
-      if on-change
-        ..on \change -> that editor.getValue!
-  editor
+  if !setup-editor.load
+    setup-editor.load = new Promise (resolve) ->
+      script = document.create-element \script
+      script.src = ace-url
+      script.add-event-listener \load resolve
+      document.body.append script
+  setup-editor.load.then ->
 
-{h, render, Component} = preact
-link = linking.link do
-  create-element: h
-  create-class: (proto) ->
-    sub:: = Object.create Component::
-    , constructor: {value: sub, +writable, +configurable}
-    Object.setPrototypeOf sub, Component
-    Object.entries proto .map ([key, value]) ->
-      Object.defineProperty sub::, key, {value, +writable, +configurable}
-    function sub => Object.getPrototypeOf sub .apply @, &
-  PropTypes: any: true
+    editor = ace.edit element
+      ..setTheme \ace/theme/chaos
+      ..setFontSize 14
+      ..setReadOnly true unless on-change
+      ..$blockScrolling = Infinity
+      ..getSession!
+        ..setUseWorker false
+        ..setMode "ace/mode/#mode"
+        ..setTabSize 2
+        ..setUseSoftTabs true
+        if on-change
+          ..on \change -> that editor.getValue!
 
-function ace-editor config={}
-  * editor = void last = void
-  (props) ->
-    attrs = {}
-    unless editor
-      attrs.ref = ->
-        editor ||:= setup-editor it, {} <<< config <<< props
-        editor.set-value props.value, 1
-    if last != props.value && editor
-      that.set-value last := props.value, 1
-    h \div attrs
+function ace-editor {mode, value, on-change}
+  container = use-ref!
+  editor = use-ref!
+
+  use-effect ->
+    setup-editor container.current, {mode, on-change}
+    .then ->
+      editor.current = it
+      if value
+        editor.current.set-value value, 1
+  , []
+
+  use-effect ->
+    editor.current?set-value value, 1
+  , [!on-change && value]
+
+  h \div ref: container
 
 sample-code = '''import
   react: create-element: h
@@ -68,22 +79,22 @@ export
   {default: fn, fn, alias: fn}
   external: {something, alias: another}'''
 
-initial-state = option: \next input: sample-code, result: ''
+initial-state = option: \lex input: sample-code, result: ''
 try initial-state <<< JSON.parse decodeURIComponent location.hash.slice 1
 
-input = ace-editor!
-editor = link input,, (state, dispatch) ->
-  value: state.input, on-change: -> dispatch type: \input data: it
+function editor {state, dispatch}
+  h ace-editor, value: state.input, on-change: ->
+    dispatch type: \input data: it
 
-status = link (-> h \div,, it.status), (.{status})
+function status {state}
+  h \div,, state.status
 
-ls = require \livescript
 options =
-  next: -> lsnext.compile it .code
-  parse: -> JSON.stringify (lsnext.parse it, {source-file-name: \t.ls}),, 2
   compile: -> ls.compile it, bare: true
   ast: -> ls.ast it
   lex: -> ls.lex it
+  next: -> JSON.stringify (convert ls.ast it),, 2
+  parse: -> JSON.stringify (next-parse it, {source-file-name: \t.ls}),, 2
 
 function render-option {name, checked, onChange}
   attrs = type: \radio checked, name: \option onChange, value: name
@@ -98,18 +109,28 @@ function render-controls {url, checked, select}
     render-option attrs
   h \div,, ...buttons, h \a href: url, ' Link to this'
 
-controls = link render-controls, (.{input, option}), (state, dispatch) ->
-  checked: state.option
-  url: location.href.split \# .0 + \# + JSON.stringify state
-  select: -> dispatch type: \option data: it
+function controls {state, dispatch}
+  props =
+    checked: state.option
+    url: location.href.split \# .0 + \# + JSON.stringify state
+    select: -> dispatch type: \option data: it
+  render-controls props
 
-output = ace-editor mode: \javascript
-result = link (-> output value: it.result), (.{result})
+function result {state}
+  h ace-editor, mode: \javascript value: state.result
+
+function reduce state, {type, data}
+  if type == \input || type == \option
+    update {} <<< state <<< (type): data
+  else state
 
 function app
+  [state, dispatch] = use-reducer reduce, update initial-state
+  o = {state, dispatch}
+
   h \div class: \wrap,
-    h \div class: \input, editor!, status!
-    h \div class: \output, controls!, result!
+    h \div class: \input, (editor o), status o
+    h \div class: \output, (controls o), result o
 
 function update state
   state <<< try
@@ -117,13 +138,4 @@ function update state
   catch
     status: e.message
 
-function reduce state, {type, data}
-  if type == \input || type == \option
-    update {} <<< state <<< (type): data
-  else state
-
-store = Redux.create-store reduce, update initial-state
-seed = link app <| {store}
-render seed, document.query-selector \#root
-store.subscribe ->
-  location.hash = JSON.stringify store.get-state!{option, input}
+render (h app), document.query-selector \#root
