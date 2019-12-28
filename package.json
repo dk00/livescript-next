@@ -23,15 +23,15 @@
   },
   "devDependencies": {
     "babel-core": "",
+    "babel-plugin-external-helpers": "",
     "babel-plugin-istanbul": "",
     "babel-plugin-transform-es2015-modules-commonjs": "",
-    "babel-plugin-external-helpers": "",
     "babel-preset-stage-0": "",
     "babel-register": "",
     "livescript": "",
     "livescript-next": "",
     "nyc": "",
-    "rollup": "",
+    "rollup": "^1.27.14",
     "rollup-plugin-babel": "",
     "rollup-plugin-node-resolve": "",
     "tape": ""

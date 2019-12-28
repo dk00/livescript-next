@@ -8,13 +8,14 @@ target =
   input: \src/index.ls
   output:
     * file: "dist/index.esm.js" format: \es
+      sourcemap: true use-strict: false
     * file: "dist/index.js" format: \umd
+      sourcemap: true use-strict: false name
     * file: "lib/index.js" format: \cjs
+      sourcemap: true use-strict: false
   plugins:
     node-resolve jsnext: true extensions: <[.ls .js]>
     babel require \./.babelrc
-  name: name
   external: <[livescript babel-core babel-types]>
-  exports: \named sourcemap: true use-strict: false
 
 export default: target
