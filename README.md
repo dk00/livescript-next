@@ -6,7 +6,7 @@ Enable latest ES features for LiveScript.
 [![coverage](https://codecov.io/gh/dk00/livescript-next/branch/master/graph/badge.svg)](https://codecov.io/gh/dk00/livescript-next)
 [![npm](https://img.shields.io/npm/v/livescript-next.svg)](https://www.npmjs.com/package/livescript-next)
 
-[Try it here](//rawgit.com/dk00/livescript-next/master/docs/)
+[Try it here](//lsn.netlify.com)
 
 This project implements a bridge from LiveScript to modern JavaScript, by converting the LiveScript AST into Babel AST and then using the Babel toolchain to generate JS:
 
