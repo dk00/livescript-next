@@ -8,11 +8,11 @@ target =
   input: \src/index.ls
   output:
     * file: "dist/index.esm.js" format: \es
-      sourcemap: true use-strict: false
+      sourcemap: true strict: false
     * file: "dist/index.js" format: \umd
-      sourcemap: true use-strict: false name
+      sourcemap: true strict: false name
     * file: "lib/index.js" format: \cjs
-      sourcemap: true use-strict: false
+      sourcemap: true strict: false
   plugins:
     node-resolve jsnext: true extensions: <[.ls .js]>
     babel plugins: [\livescript]

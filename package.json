@@ -15,21 +15,21 @@
     "lib"
   ],
   "dependencies": {
-    "@babel/types": "^7.7.4"
+    "@babel/types": "^7.9.5"
   },
   "devDependencies": {
-    "@babel/core": "^7.7.7",
-    "@babel/plugin-proposal-async-generator-functions": "^7.7.4",
-    "@babel/plugin-proposal-do-expressions": "^7.7.4",
-    "@babel/plugin-proposal-export-default-from": "^7.7.4",
-    "@babel/plugin-proposal-function-bind": "^7.7.4",
-    "@babel/plugin-transform-modules-commonjs": "^7.7.5",
-    "@babel/register": "^7.7.7",
+    "@babel/core": "^7.9.0",
+    "@babel/plugin-proposal-async-generator-functions": "^7.8.3",
+    "@babel/plugin-proposal-do-expressions": "^7.8.3",
+    "@babel/plugin-proposal-export-default-from": "^7.8.3",
+    "@babel/plugin-proposal-function-bind": "^7.8.3",
+    "@babel/plugin-transform-modules-commonjs": "^7.9.0",
+    "@babel/register": "^7.9.0",
     "babel-plugin-istanbul": "^6.0.0",
     "babel-plugin-livescript": "^0.0.3",
     "livescript": "1.5.0",
-    "nyc": "^15.0.0",
-    "rollup": "^1.27.14",
+    "nyc": "^15.0.1",
+    "rollup": "^2.7.2",
     "rollup-plugin-babel": "4.0.0-beta.8",
     "rollup-plugin-node-resolve": "^5.2.0",
     "tape": "^4.12.1"
