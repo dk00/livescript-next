@@ -1,9 +1,0 @@
-language: node_js
-node_js:
-  - node
-  - lts/*
-cache: yarn
-after_success:
-  - yarn add -O coveralls codecov
-  - ./node_modules/.bin/codecov
-  - ./node_modules/coveralls/bin/coveralls.js < ./coverage/lcov.info
