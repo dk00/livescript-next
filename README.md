@@ -2,7 +2,7 @@
 
 Enable latest ES features for LiveScript.
 
-[![build status](https://travis-ci.org/dk00/livescript-next.svg)](https://travis-ci.org/dk00/livescript-next)
+[![build status](https://github.com/dk00/livescript-next/workflows/build/badge.svg)](https://github.com/dk00/livescript-next/actions)
 [![coverage](https://codecov.io/gh/dk00/livescript-next/branch/master/graph/badge.svg)](https://codecov.io/gh/dk00/livescript-next)
 [![npm](https://img.shields.io/npm/v/livescript-next.svg)](https://www.npmjs.com/package/livescript-next)
 

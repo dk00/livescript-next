@@ -1,21 +1,23 @@
 import
-  \rollup-plugin-babel : babel
-  \rollup-plugin-node-resolve : node-resolve
+  'rollup-plugin-pnp-resolve': pnp-resolve
+  '@rollup/plugin-node-resolve': node-resolve
+  '@rollup/plugin-babel': babel
 
-{name} = require \./package.json
+package-config = require \./package.json
 
 target =
   input: \src/index.ls
   output:
-    * file: "dist/index.esm.js" format: \es
+    * file: package-config.module, format: \es
       sourcemap: true strict: false
-    * file: "dist/index.js" format: \umd
-      sourcemap: true strict: false name
-    * file: "lib/index.js" format: \cjs
+    * file: package-config.main, format: \cjs
       sourcemap: true strict: false
+    * file: package-config.browser, format: \umd
+      sourcemap: true strict: false name: package-config.name
   plugins:
+    pnp-resolve!
     node-resolve jsnext: true extensions: <[.ls .js]>
-    babel plugins: [\livescript]
+    babel plugins: [\livescript] extensions: [\.ls] skip-preflight-check: true
   external: <[livescript @babel/types @babel/core]>
 
 export default: target
